@@ -1485,7 +1485,7 @@ namespace Cactus.Drivers
             }
             catch (NoSuchElementException)
             {
-                if (safeMode == false && _element == null)
+                if (safeMode == false && _elements == null)
                 {
                     Support.ScreenShot();
                     throw new NoSuchElementException(MyBy + " was not found on the page.");
