@@ -384,18 +384,13 @@ namespace Cactus.Drivers
                     timeout: waitTimeSpan,
                     sleepInterval: TimeSpan.FromMilliseconds(5)
                     );
-
+                var expectedUrl = expected.Replace("https://", "").Replace("http://", "");
                 try
                 {
-                    wait.Until(driver =>
-                    {
-                        if (!Engine.WebDriver.Url.ToLower().Contains(expected.ToLower().Replace("https://","").Replace("http://",""))) return false;
-
-                        _log = new UxTestingLogger();
-                        _log.LogDebug("Current URL = " + Engine.WebDriver.Url);
-                        WaitForPageReadyState(waitTimeSpan);
-                        return true;
-                    });
+                    wait.Until(ExpectedConditions.UrlContains(expectedUrl));
+                    _log = new UxTestingLogger();
+                    _log.LogDebug("Current URL = " + Engine.WebDriver.Url);
+                    WaitForPageReadyState(waitTimeSpan);
                 }
                 catch (Exception ex)
                 {
@@ -434,7 +429,7 @@ namespace Cactus.Drivers
                 if (expected.Contains(";"))
                 {
                     wait.Until(driver =>
-                    {
+                    { 
                         if (expected.Split(';').Any(expec => Engine.WebDriver.Url.ToLower().EndsWith(expec.ToLower())))
                         {
                             Debug.WriteLine(Engine.WebDriver.Url);
