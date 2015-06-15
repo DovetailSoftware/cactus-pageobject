@@ -10,6 +10,8 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
+using System.Xml;
+using System.Xml.XPath;
 using Cactus.Infrastructure;
 using HtmlTags;
 using OpenQA.Selenium;
@@ -64,6 +66,12 @@ namespace Cactus.Drivers
         /// Base constructor for the Element Controller.
         /// How is "how" you want the selector to be identified.
         /// Value is only used for HTMLTag identification.
+        /// The logic for this is that each Control By Selector is loaded into memory, but not used.
+        /// Every Control on the PageObject pages will be pulled in at the beginning of this sample line of code.
+        ////    using (var page = new PageObjectFileXX)
+        ////    {
+        ////    }
+        /// On the end of the using, all memory will be released.  PageObject files are IDisposable.
         /// </summary>
         /// <param name="type"></param>
         /// <param name="_selector"></param>
@@ -184,6 +192,18 @@ namespace Cactus.Drivers
         #endregion
 
         #region Control Add on Methods
+
+        /// <summary>
+        /// Validate the XPath locator string.  This will help debugging during coding of tests.
+        /// </summary>
+        /// <param name="xPathString"></param>
+        public static void AssertValidXpath(string xPathString)
+        {
+            XmlDocument doc = new XmlDocument();
+            XPathNavigator nav = doc.CreateNavigator();
+            // will throw invalid Xpath expression (XPathException)
+            XPathExpression expr = nav.Compile(xPathString);
+        }
 
         /// <summary>
         /// Add a class from an element
@@ -1362,6 +1382,9 @@ namespace Cactus.Drivers
             }
             try
             {
+                if (how == How.XPath)
+                    AssertValidXpath(selector);
+
                 Engine.CurrentControl = this;
                 var wait = new WebDriverWait(Engine.WebDriver, TimeSpan.FromSeconds(8));
                 try
@@ -1374,20 +1397,28 @@ namespace Cactus.Drivers
                 }
                 _element = Engine.WebDriver.FindElement(MyBy);
             }
-            catch (Exception ex)
-            {
-                _logger.LogException(ex);
-                //throw;
-            }
-            finally
+            catch (NoSuchElementException)
             {
                 if (safeMode == false && _element == null)
                 {
                     Support.ScreenShot();
                     throw new NoSuchElementException(MyBy + " was not found on the page.");
                 }
-                if (highlight && _element != null)
-                    Highlight();
+            }
+            catch (WebDriverException webDriverException)
+            {
+                _logger.LogException(webDriverException);
+                throw;
+            }
+            catch (XPathException xPathException)
+            {
+                _logger.LogException(xPathException);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogException(ex);
+                //throw;
             }
         }
 
@@ -1402,10 +1433,23 @@ namespace Cactus.Drivers
             }
             try
             {
+                if (how == How.XPath)
+                    AssertValidXpath(selector);
+
                 Engine.CurrentControl = this;
                 _wait.Until(d => Engine.FindElement(how, childSelector));
                 _element = Engine.FindElement(how, childSelector);
                 Highlight();
+            }
+            catch (WebDriverException webDriverException)
+            {
+                _logger.LogException(webDriverException);
+                throw;
+            }
+            catch (XPathException xPathException)
+            {
+                _logger.LogException(xPathException);
+                throw;
             }
             catch (Exception ex)
             {
@@ -1439,18 +1483,28 @@ namespace Cactus.Drivers
                 }
                 _elements = Engine.WebDriver.FindElements(MyBy);
             }
-            catch (Exception ex)
+            catch (NoSuchElementException)
             {
-                _logger.LogException(ex);
-                //throw;
-            }
-            finally
-            {
-                if (safeMode == false && _elements == null)
+                if (safeMode == false && _element == null)
                 {
                     Support.ScreenShot();
                     throw new NoSuchElementException(MyBy + " was not found on the page.");
                 }
+            }
+            catch (WebDriverException webDriverException)
+            {
+                _logger.LogException(webDriverException);
+                throw;
+            }
+            catch (XPathException xPathException)
+            {
+                _logger.LogException(xPathException);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogException(ex);
+                //throw;
             }
         }
 
