@@ -1,4 +1,8 @@
-﻿using OpenQA.Selenium.Support.Events;
+﻿using System;
+using System.Diagnostics;
+using System.Reflection;
+using System.Threading;
+using OpenQA.Selenium.Support.Events;
 using Cactus.Infrastructure;
 using OpenQA.Selenium;
 
@@ -15,24 +19,41 @@ namespace Cactus.Drivers
 
         public void firingDriver_ExceptionThrown(object sender, WebDriverExceptionEventArgs e)
         {
+            if (e.ThrownException.GetType() == typeof(NoSuchElementException))
+            {
+                _log.LogException(e.ThrownException);
+            }
+
             if (e.ThrownException.Message.Contains("sending an HTTP request to the remote WebDriver server") ||
                 e.ThrownException.Message.Contains("No session ID specified"))
+            {
                 return; //ignore these. do not screenshot.
+            }
 
 
-            if (e.ThrownException.GetType() == typeof (NoSuchElementException) ||
-                e.ThrownException.GetType() == typeof (StaleElementReferenceException) ||
-                e.ThrownException.GetType() == typeof (NoAlertPresentException))
+            if (e.ThrownException.GetType() == typeof(NoSuchElementException) ||
+                e.ThrownException.GetType() == typeof(NoSuchWindowException) ||
+                e.ThrownException.GetType() == typeof(StaleElementReferenceException) ||
+                e.ThrownException.GetType() == typeof(NoAlertPresentException) ||
+                e.ThrownException.GetType() == typeof(InvalidOperationException) ||
+                e.ThrownException is ThreadAbortException)
+            {
                 return; //ignore these.
+            }
+
+            if (e.ThrownException.GetType() == typeof(ArgumentNullException) && e.ThrownException.Message.Contains("by cannot be null"))
+            {
+                return; //ignore these.
+            }
 
             //OpenQA.Selenium.UnhandledAlertException: unexpected alert open
-            if (e.ThrownException.GetType() == typeof (UnhandledAlertException))
+            if (e.ThrownException.GetType() == typeof(UnhandledAlertException))
             {
-                Engine.AlertGoAway();
+                Engine.AlertAccept();
                 return;
             }
 
-            _log.LogException(e.ThrownException);
+            _log.LogError(getReflectionUsage(), e.ThrownException);
             Support.ScreenShot();
         }
 
@@ -90,5 +111,46 @@ namespace Cactus.Drivers
             _log.LogDebug("Navigated forward");
         }
 
+        private static string getReflectionUsage(int maxReflection = 5)
+        {
+            try
+            {
+                var stackTrace = new StackTrace();
+                // Display the most recent function call.
+                if (stackTrace.GetFrame(0) == null)
+                {
+                    // exit out, as something has gone wrong.
+                    return "";
+                }
+                var methodName = "";
+                var className = "";
+                int counter = 0;
+                foreach (StackFrame stackFrame in stackTrace.GetFrames())
+                {
+                    if (counter > maxReflection)
+                    {
+                        break;
+                    }
+                    if (counter > 3)
+                    {
+                        // get calling method name by level
+                        MethodBase method = stackFrame.GetMethod();
+                        if (methodName != method.Name || className != method.ReflectedType.Name)
+                        {
+                            methodName = method.Name;
+                            className = method.ReflectedType.Name;
+                            return "class." + className + ".method." + methodName;
+                        }
+                    }
+                    counter++;
+                }
+            }
+            catch (Exception)
+            {
+                return "";
+                //ignore
+            }
+            return "";
+        }
     }
 }

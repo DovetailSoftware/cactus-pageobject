@@ -6,6 +6,7 @@ using System.Dynamic;
 using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Net;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -18,7 +19,6 @@ using OpenQA.Selenium;
 using OpenQA.Selenium.Interactions;
 using OpenQA.Selenium.Support.UI;
 using Cactus.Infrastructure;
-using OpenQA.Selenium.Internal;
 
 namespace Cactus.Drivers
 {
@@ -103,6 +103,11 @@ namespace Cactus.Drivers
                     _log.LogInfo(string.Format("ScreenShot file saved locally as file:///" + ScreenShotFolder + screenShotFileName).Replace(@"\","/"));
                 }
             }
+                        catch (ArgumentException)
+            {
+                //ignore
+                //System.ArgumentException: Search context must be a RemoteWebDriver Parameter name: browserDriver
+            }
             catch (FileNotFoundException fileEx)
             {
                 _log.LogError("File not found for screenshot ", exception: fileEx);
@@ -172,6 +177,21 @@ namespace Cactus.Drivers
         /// </summary>
         public static void WaitForAjaxToComplete(TimeSpan waitTimeSpan)
         {
+            try
+            {
+                var currentUrl = Engine.WebDriver.Url;
+                if (currentUrl.Contains("login")
+                    || currentUrl.Contains(".htm")
+                    || currentUrl.EndsWith("gif")
+                    || currentUrl.Contains("/support/")
+                    || currentUrl.Contains("/agent/console/cases"))
+                    return;
+            }
+            catch (UnhandledAlertException)
+            {
+                //ignore
+            }
+
             using (PerformanceTimer.Start(
                 timer => PerformanceTimer.LogTimeResult("WaitForAjaxToComplete", timer)))
             {
@@ -184,14 +204,27 @@ namespace Cactus.Drivers
 
                 wait.Until(d =>
                 {
-                    var javaScriptExecutor = Engine.WebDriver as IJavaScriptExecutor;
-                    var ajaxIsComplete = javaScriptExecutor != null
-                                         && (bool)javaScriptExecutor.ExecuteScript("return jQuery.active == 0");
-                    if (ajaxIsComplete)
-                        return true;
+                    try
+                    {
+                        var javaScriptExecutor = Engine.WebDriver as IJavaScriptExecutor;
+                        var ajaxIsComplete = javaScriptExecutor != null
+                                             && (bool)javaScriptExecutor.ExecuteScript("return jQuery.active == 0");
+                        if (ajaxIsComplete)
+                            return true;
 
-                    Thread.Sleep(50);
-                    return false;
+                        Thread.Sleep(50);
+                        return false;
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // if a page does not have jquery it will hit this exception.
+                        return true;
+                    }
+                    catch (TimeoutException)
+                    {
+                        // ignore and try and continue.
+                        return true;
+                    }
                 });
             }
         }
@@ -245,6 +278,23 @@ namespace Cactus.Drivers
         /// <param name="waitTimeSpan"></param>
         public static void WaitForPageReadyState(TimeSpan waitTimeSpan)
         {
+            try
+            {
+                var currentUrl = Engine.WebDriver.Url;
+                if (currentUrl.Contains("login")
+                    || currentUrl.Contains(".htm")
+                    || currentUrl.EndsWith("gif")
+                    || currentUrl.Contains("/support/"))
+                    return;
+            }
+            catch (UnhandledAlertException)
+            {
+                //ignore
+            }
+            catch (NoSuchWindowException)
+            {
+                return;
+            }
             using (PerformanceTimer.Start(
                 timer => PerformanceTimer.LogTimeResult("WaitForPageReadyState", timer)))
             {
@@ -270,6 +320,9 @@ namespace Cactus.Drivers
                 {
                     Engine.SwitchOutToDefaultContent();
                 }
+
+                if (Engine.Browser == SupportedBrowserType.Firefox)
+                    Thread.Sleep(20);
 
                 wait.Until(d =>
                 {
@@ -314,6 +367,10 @@ namespace Cactus.Drivers
                         return true;
                     }
                 });
+
+
+                if (Engine.Browser == SupportedBrowserType.Firefox)
+                    Support.WaitForAjaxToComplete(waitTimeSpan);
             }
         }
 
@@ -375,6 +432,10 @@ namespace Cactus.Drivers
 
         public static void WaitForUrlToContain(string expected, TimeSpan waitTimeSpan)
         {
+            if (string.IsNullOrEmpty(expected))
+                throw new Exception("WaitForUrlToContain: expected string was empty");
+            _log = new UxTestingLogger();
+
             using (PerformanceTimer.Start(
                 timer => PerformanceTimer.LogTimeResult("WaitForUrlToContain", timer)))
             {
@@ -384,13 +445,30 @@ namespace Cactus.Drivers
                     timeout: waitTimeSpan,
                     sleepInterval: TimeSpan.FromMilliseconds(5)
                     );
-                var expectedUrl = expected.Replace("https://", "").Replace("http://", "");
+
                 try
                 {
-                    wait.Until(ExpectedConditions.UrlContains(expectedUrl));
-                    _log = new UxTestingLogger();
-                    _log.LogDebug("Current URL = " + Engine.WebDriver.Url);
-                    WaitForPageReadyState(waitTimeSpan);
+                    wait.Until(driver =>
+                    {
+                        try
+                        {
+                            if (!Engine.WebDriver.Url.ToLower().Contains(expected.ToLower())) return false;
+
+                            _log = new UxTestingLogger();
+                            _log.LogDebug("Current URL = " + Engine.WebDriver.Url);
+                            WaitForPageReadyState(waitTimeSpan);
+                            return true;
+                        }
+                        catch (NoSuchWindowException)
+                        {
+                            return false;
+                        }
+                    });
+                }
+
+                catch (WebDriverTimeoutException timeoutException)
+                {
+                    _log.LogError("FAIL: WaitForUrlToContain ", timeoutException);
                 }
                 catch (Exception ex)
                 {
@@ -429,7 +507,7 @@ namespace Cactus.Drivers
                 if (expected.Contains(";"))
                 {
                     wait.Until(driver =>
-                    { 
+                    {
                         if (expected.Split(';').Any(expec => Engine.WebDriver.Url.ToLower().EndsWith(expec.ToLower())))
                         {
                             Debug.WriteLine(Engine.WebDriver.Url);
@@ -451,6 +529,250 @@ namespace Cactus.Drivers
                         }
                         return false;
                     });
+                }
+            }
+        }
+
+        /// <summary>
+        /// Wait until an alert is present on page
+        /// Default wait time 12 seconds
+        /// </summary>
+        public static void WaitUntilAlertIsPresent()
+        {
+            WaitUntilAlertIsPresent(TimeSpan.FromSeconds(DEFAULT_WAIT_SECONDS));
+        }
+
+        /// <summary>
+        /// Wait until an alert is present on page
+        /// </summary>
+        /// <param name="waitTimeSpan">Timeout in TimeSpan</param>
+        /// <returns></returns>
+        public static void WaitUntilAlertIsPresent(TimeSpan waitTimeSpan)
+        {
+            _log = new UxTestingLogger();
+
+            using (PerformanceTimer.Start(
+                timer => PerformanceTimer.LogTimeResult("WaitUntilAlertIsPresent ", timer)))
+            {
+                IClock iClock = new SystemClock();
+                var wait = new WebDriverWait(clock: iClock,
+                    driver: Engine.WebDriver,
+                    timeout: waitTimeSpan,
+                    sleepInterval: TimeSpan.FromMilliseconds(5)
+                    );
+                try
+                {
+                    wait.Until(ExpectedConditions.AlertIsPresent());
+                }
+                catch (WebDriverTimeoutException)
+                {
+                    _log.LogError("Alert was never made present. TimeoutException");
+                    ScreenShot();
+                }
+                catch (TimeoutException)
+                {
+                    _log.LogError("Alert was never made present. TimeoutException");
+                    ScreenShot();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Wait until an alert is in the correct state
+        /// Default wait time 12 seconds
+        /// </summary>
+        /// <param name="state"></param>
+        public static void WaitUntilAlertState(bool state)
+        {
+            WaitUntilAlertState(state, TimeSpan.FromSeconds(DEFAULT_WAIT_SECONDS));
+        }
+
+        /// <summary>
+        /// Wait until an alert is in the correct state
+        /// </summary>
+        /// <param name="state"></param>
+        /// <param name="waitTimeSpan">Timeout in TimeSpan</param>
+        /// <returns></returns>
+        public static void WaitUntilAlertState(bool state, TimeSpan waitTimeSpan)
+        {
+            _log = new UxTestingLogger();
+
+            using (PerformanceTimer.Start(
+                timer => PerformanceTimer.LogTimeResult("WaitUntilAlertState ", timer)))
+            {
+                IClock iClock = new SystemClock();
+                var wait = new WebDriverWait(clock: iClock,
+                    driver: Engine.WebDriver,
+                    timeout: waitTimeSpan,
+                    sleepInterval: TimeSpan.FromMilliseconds(5)
+                    );
+                try
+                {
+                    wait.Until(ExpectedConditions.AlertState(state));
+                }
+                catch (WebDriverTimeoutException)
+                {
+                    _log.LogError("Alert was never in the correct state. TimeoutException");
+                    ScreenShot();
+                }
+                catch (TimeoutException)
+                {
+                    _log.LogError("Alert was never in the correct state. TimeoutException");
+                    ScreenShot();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Wait until the element is present on page
+        /// Default wait time 8 seconds.
+        /// </summary>
+        /// <param name="parentElement"></param>
+        /// <param name="childBy">By.Id("hello")</param>
+        /// <returns></returns>
+        public static bool WaitUntilChildElementIsPresent(IWebElement parentElement, By childBy)
+        {
+            return WaitUntilChildElementIsPresent(parentElement, childBy, TimeSpan.FromSeconds(DEFAULT_WAIT_SECONDS));
+        }
+
+        /// <summary>
+        /// Wait until the element is present on page
+        /// </summary>
+        /// <param name="element"></param>
+        /// <param name="childBy"></param>
+        /// <param name="waitTimeSpan">Timeout in TimeSpan</param>
+        /// <returns></returns>
+        public static bool WaitUntilChildElementIsPresent(IWebElement element, By childBy, TimeSpan waitTimeSpan)
+        {
+            using (PerformanceTimer.Start(
+                timer => PerformanceTimer.LogTimeResult("WaitUntilChildElementsArePresent " + childBy, timer)))
+            {
+                IClock iClock = new SystemClock();
+                var wait = new WebDriverWait(clock: iClock,
+                    driver: Engine.WebDriver,
+                    timeout: waitTimeSpan,
+                    sleepInterval: TimeSpan.FromMilliseconds(5)
+                    );
+                try
+                {
+                    wait.Until(d => element.FindElements(childBy).Count > 0);
+                    return Engine.IsElementPresent(element);
+                }
+                catch (WebDriverTimeoutException)
+                {
+                    return false;
+                }
+                catch (TimeoutException)
+                {
+                    return false;
+                }
+                catch (NoSuchElementException)
+                {
+                    return false;
+                }
+            }
+        }
+
+
+        /// <summary>
+        /// Wait until the element is present on page
+        /// Default wait time 8 seconds.
+        /// </summary>
+        /// <param name="parentElement"></param>
+        /// <param name="childBy">By.Id("hello")</param>
+        /// <returns></returns>
+        public static bool WaitUntilChildElementIsPresent(IWebElement parentElement, OpenQA.Selenium.By childBy)
+        {
+            return WaitUntilChildElementIsPresent(parentElement, childBy, TimeSpan.FromSeconds(DEFAULT_WAIT_SECONDS));
+        }
+
+        /// <summary>
+        /// Wait until the element is present on page
+        /// </summary>
+        /// <param name="element"></param>
+        /// <param name="childBy"></param>
+        /// <param name="waitTimeSpan">Timeout in TimeSpan</param>
+        /// <returns></returns>
+        public static bool WaitUntilChildElementIsPresent(IWebElement element, OpenQA.Selenium.By childBy, TimeSpan waitTimeSpan)
+        {
+            using (PerformanceTimer.Start(
+                timer => PerformanceTimer.LogTimeResult("WaitUntilChildElementsArePresent " + childBy, timer)))
+            {
+                IClock iClock = new SystemClock();
+                var wait = new WebDriverWait(clock: iClock,
+                    driver: Engine.WebDriver,
+                    timeout: waitTimeSpan,
+                    sleepInterval: TimeSpan.FromMilliseconds(5)
+                    );
+                try
+                {
+                    wait.Until(d => element.FindElements(childBy).Count > 0);
+                    return Engine.IsElementPresent(element);
+                }
+                catch (WebDriverTimeoutException)
+                {
+                    return false;
+                }
+                catch (TimeoutException)
+                {
+                    return false;
+                }
+                catch (NoSuchElementException)
+                {
+                    return false;
+                }
+            }
+        }
+
+
+        /// <summary>
+        /// Wait until the element is present on page
+        /// Default wait time 8 seconds.
+        /// </summary>
+        /// <param name="parentElement"></param>
+        /// <param name="childBy">By.Id("hello")</param>
+        /// <param name="countGreaterThan"></param>
+        /// <returns></returns>
+        public static bool WaitUntilChildElementsArePresent(IWebElement parentElement, OpenQA.Selenium.By childBy, int countGreaterThan = 0)
+        {
+            return WaitUntilChildElementsArePresent(parentElement, childBy, countGreaterThan, TimeSpan.FromSeconds(DEFAULT_WAIT_SECONDS));
+        }
+
+        /// <summary>
+        /// Wait until the element is present on page
+        /// </summary>
+        /// <param name="element"></param>
+        /// <param name="childBy"></param>
+        /// <param name="countGreaterThan"></param>
+        /// <param name="waitTimeSpan">Timeout in TimeSpan</param>
+        /// <returns></returns>
+        public static bool WaitUntilChildElementsArePresent(IWebElement element, OpenQA.Selenium.By childBy, int countGreaterThan, TimeSpan waitTimeSpan)
+        {
+            using (PerformanceTimer.Start(
+                timer => PerformanceTimer.LogTimeResult("WaitUntilChildElementsArePresent " + childBy, timer)))
+            {
+                IClock iClock = new SystemClock();
+                var wait = new WebDriverWait(clock: iClock,
+                    driver: Engine.WebDriver,
+                    timeout: waitTimeSpan,
+                    sleepInterval: TimeSpan.FromMilliseconds(5)
+                    );
+                try
+                {
+                    wait.Until(d => element.FindElements(childBy).Count > countGreaterThan);
+                    return Engine.IsElementPresent(element);
+                }
+                catch (WebDriverTimeoutException)
+                {
+                    return false;
+                }
+                catch (TimeoutException)
+                {
+                    return false;
+                }
+                catch (NoSuchElementException)
+                {
+                    return false;
                 }
             }
         }
@@ -497,24 +819,32 @@ namespace Cactus.Drivers
         /// <returns></returns>
         public static bool WaitUntilElementIsPresent(IWebElement element, TimeSpan waitTimeSpan)
         {
-            IClock iClock = new SystemClock();
-            var wait = new WebDriverWait(clock: iClock,
-                driver: Engine.WebDriver,
-                timeout: waitTimeSpan,
-                sleepInterval: TimeSpan.FromMilliseconds(5)
-                );
-            try
+            using (PerformanceTimer.Start(
+                timer => PerformanceTimer.LogTimeResult("WaitUntilElementIsPresent ", timer)))
             {
-                wait.Until(d => Engine.IsElementPresent(element));
-                return Engine.IsElementPresent(element);
-            }
-            catch (TimeoutException)
-            {
-                return false;
-            }
-            catch (NoSuchElementException)
-            {
-                return false;
+                IClock iClock = new SystemClock();
+                var wait = new WebDriverWait(clock: iClock,
+                    driver: Engine.WebDriver,
+                    timeout: waitTimeSpan,
+                    sleepInterval: TimeSpan.FromMilliseconds(5)
+                    );
+                try
+                {
+                    wait.Until(d => Engine.IsElementPresent(element));
+                    return Engine.IsElementPresent(element);
+                }
+                catch (WebDriverTimeoutException)
+                {
+                    return false;
+                }
+                catch (TimeoutException)
+                {
+                    return false;
+                }
+                catch (NoSuchElementException)
+                {
+                    return false;
+                }
             }
         }
         /// <summary>
@@ -525,25 +855,32 @@ namespace Cactus.Drivers
         /// <returns></returns>
         public static IWebElement WaitUntilElementIsPresent(By by, TimeSpan waitTimeSpan)
         {
-
-            IClock iClock = new SystemClock();
-            var wait = new WebDriverWait(clock: iClock,
-                driver: Engine.WebDriver,
-                timeout: waitTimeSpan,
-                sleepInterval: TimeSpan.FromMilliseconds(5)
-                );
-            try
+            using (PerformanceTimer.Start(
+                timer => PerformanceTimer.LogTimeResult("WaitUntilElementIsPresent " + by, timer)))
             {
-                wait.Until(d => Engine.IsElementPresent(@by));
-                return Engine.FindElement(by);
-            }
-            catch (TimeoutException)
-            {
-                return null;
-            }
-            catch (NoSuchElementException)
-            {
-                return null;
+                IClock iClock = new SystemClock();
+                var wait = new WebDriverWait(clock: iClock,
+                    driver: Engine.WebDriver,
+                    timeout: waitTimeSpan,
+                    sleepInterval: TimeSpan.FromMilliseconds(5)
+                    );
+                try
+                {
+                    wait.Until(d => Engine.IsElementPresent(@by));
+                    return Engine.FindElement(by);
+                }
+                catch (WebDriverTimeoutException)
+                {
+                    return null;
+                }
+                catch (TimeoutException)
+                {
+                    return null;
+                }
+                catch (NoSuchElementException)
+                {
+                    return null;
+                }
             }
         }
 
@@ -559,30 +896,43 @@ namespace Cactus.Drivers
             {
                 throw new Exception("No by statement was given for this wait call.");
             }
-            IClock iClock = new SystemClock();
-            var wait = new WebDriverWait(clock: iClock,
-                driver: Engine.WebDriver,
-                timeout: waitTimeSpan,
-                sleepInterval: TimeSpan.FromMilliseconds(5)
-                );
-            try
+            _log = new UxTestingLogger();
+
+            using (PerformanceTimer.Start(
+                timer => PerformanceTimer.LogTimeResult("WaitUntilElementIsPresent " + by, timer)))
             {
-                wait.Until(ExpectedConditions.ElementExists(@by));
-                return Engine.FindElement(by);
-            }
-            catch (TimeoutException)
-            {
-                _log = new UxTestingLogger();
-                _log.LogError(by + " was never made present. TimeoutException");
-                ScreenShot();
-                return null;
-            }
-            catch (NoSuchElementException)
-            {
-                _log = new UxTestingLogger();
-                _log.LogError(by + " was never made present. NoSuchElementException");
-                ScreenShot();
-                return null;
+                IClock iClock = new SystemClock();
+                var wait = new WebDriverWait(clock: iClock,
+                    driver: Engine.WebDriver,
+                    timeout: waitTimeSpan,
+                    sleepInterval: TimeSpan.FromMilliseconds(5)
+                    );
+                try
+                {
+                    wait.Until(ExpectedConditions.ElementExists(@by));
+                    return Engine.FindElement(by);
+                }
+                catch (WebDriverTimeoutException)
+                {
+                    _log = new UxTestingLogger();
+                    _log.LogError(by + " was never made present. TimeoutException");
+                    ScreenShot();
+                    return null;
+                }
+                catch (TimeoutException)
+                {
+                    _log = new UxTestingLogger();
+                    _log.LogError(by + " was never made present. TimeoutException");
+                    ScreenShot();
+                    return null;
+                }
+                catch (NoSuchElementException)
+                {
+                    _log = new UxTestingLogger();
+                    _log.LogError(by + " was never made present. NoSuchElementException");
+                    ScreenShot();
+                    return null;
+                }
             }
         }
 
@@ -599,25 +949,33 @@ namespace Cactus.Drivers
             {
                 return null;
             }
-            IClock iClock = new SystemClock();
-            var wait = new WebDriverWait(clock: iClock,
-                driver: Engine.WebDriver,
-                timeout: waitTimeSpan,
-                sleepInterval: TimeSpan.FromMilliseconds(5)
-                );
-            try
+            using (PerformanceTimer.Start(
+                timer => PerformanceTimer.LogTimeResult("WaitUntilElementHasClass " + by, timer)))
             {
-                wait.Until(ExpectedConditions.ElementExists(@by));
-                wait.Until(d => Engine.FindElement(@by).GetAttribute("class").Contains(classString));
-                return Engine.FindElement(by);
-            }
-            catch (TimeoutException)
-            {
-                return null;
-            }
-            catch (NoSuchElementException)
-            {
-                return null;
+                IClock iClock = new SystemClock();
+                var wait = new WebDriverWait(clock: iClock,
+                    driver: Engine.WebDriver,
+                    timeout: waitTimeSpan,
+                    sleepInterval: TimeSpan.FromMilliseconds(5)
+                    );
+                try
+                {
+                    wait.Until(ExpectedConditions.ElementExists(@by));
+                    wait.Until(d => Engine.FindElement(@by).GetAttribute("class").Contains(classString));
+                    return Engine.FindElement(by);
+                }
+                catch (WebDriverTimeoutException)
+                {
+                    return null;
+                }
+                catch (TimeoutException)
+                {
+                    return null;
+                }
+                catch (NoSuchElementException)
+                {
+                    return null;
+                }
             }
         }
 
@@ -634,33 +992,41 @@ namespace Cactus.Drivers
             {
                 return null;
             }
-            IClock iClock = new SystemClock();
-            var wait = new WebDriverWait(clock: iClock,
-                driver: Engine.WebDriver,
-                timeout: waitTimeSpan,
-                sleepInterval: TimeSpan.FromMilliseconds(5)
-                );
-            try
+            using (PerformanceTimer.Start(
+                timer => PerformanceTimer.LogTimeResult("WaitUntilElementHasText " + by + " " + text, timer)))
             {
-                wait.Until(ExpectedConditions.ElementExists(@by));
-                if (string.IsNullOrEmpty(text))
+                IClock iClock = new SystemClock();
+                var wait = new WebDriverWait(clock: iClock,
+                    driver: Engine.WebDriver,
+                    timeout: waitTimeSpan,
+                    sleepInterval: TimeSpan.FromMilliseconds(5)
+                    );
+                try
                 {
-                    wait.Until(d => Engine.FindElement(@by).Text.Length > 0);
-                }
-                else
-                {
-                    wait.Until(d => Engine.FindElement(@by).Text.Contains(text));
-                }
+                    wait.Until(ExpectedConditions.ElementExists(@by));
+                    if (string.IsNullOrEmpty(text))
+                    {
+                        wait.Until(d => Engine.FindElement(@by).Text.Length > 0);
+                    }
+                    else
+                    {
+                        wait.Until(d => Engine.FindElement(@by).Text.Contains(text));
+                    }
 
-                return Engine.FindElement(by);
-            }
-            catch (TimeoutException)
-            {
-                return null;
-            }
-            catch (NoSuchElementException)
-            {
-                return null;
+                    return Engine.FindElement(by);
+                }
+                catch (WebDriverTimeoutException)
+                {
+                    return null;
+                }
+                catch (TimeoutException)
+                {
+                    return null;
+                }
+                catch (NoSuchElementException)
+                {
+                    return null;
+                }
             }
         }
 
@@ -677,33 +1043,41 @@ namespace Cactus.Drivers
             {
                 return null;
             }
-            IClock iClock = new SystemClock();
-            var wait = new WebDriverWait(clock: iClock,
-                driver: Engine.WebDriver,
-                timeout: waitTimeSpan,
-                sleepInterval: TimeSpan.FromMilliseconds(5)
-                );
-            try
+            using (PerformanceTimer.Start(
+                timer => PerformanceTimer.LogTimeResult("WaitUntilElementDoesNotHaveText " + by + " " + text, timer)))
             {
-                wait.Until(ExpectedConditions.ElementExists(@by));
-                if (string.IsNullOrEmpty(text))
+                IClock iClock = new SystemClock();
+                var wait = new WebDriverWait(clock: iClock,
+                    driver: Engine.WebDriver,
+                    timeout: waitTimeSpan,
+                    sleepInterval: TimeSpan.FromMilliseconds(5)
+                    );
+                try
                 {
-                    wait.Until(d => Engine.FindElement(@by).Text.Length > 0);
-                }
-                else
-                {
-                    wait.Until(d => !Engine.FindElement(@by).Text.Contains(text));
-                }
+                    wait.Until(ExpectedConditions.ElementExists(@by));
+                    if (string.IsNullOrEmpty(text))
+                    {
+                        wait.Until(d => Engine.FindElement(@by).Text.Length > 0);
+                    }
+                    else
+                    {
+                        wait.Until(d => !Engine.FindElement(@by).Text.Contains(text));
+                    }
 
-                return Engine.FindElement(by);
-            }
-            catch (TimeoutException)
-            {
-                return null;
-            }
-            catch (NoSuchElementException)
-            {
-                return null;
+                    return Engine.FindElement(by);
+                }
+                catch (WebDriverTimeoutException)
+                {
+                    return null;
+                }
+                catch (TimeoutException)
+                {
+                    return null;
+                }
+                catch (NoSuchElementException)
+                {
+                    return null;
+                }
             }
         }
         /// <summary>
@@ -725,27 +1099,35 @@ namespace Cactus.Drivers
         /// <returns></returns>
         public static IWebElement WaitUntilElementIsPresent(CustomBy by, TimeSpan waitTimeSpan)
         {
-            IClock iClock = new SystemClock();
-            var wait = new WebDriverWait(clock: iClock,
-                driver: Engine.WebDriver,
-                timeout: waitTimeSpan,
-                sleepInterval: TimeSpan.FromMilliseconds(5)
-                );
-            try
+            using (PerformanceTimer.Start(
+                timer => PerformanceTimer.LogTimeResult("WaitUntilElementIsPresent " + by, timer)))
             {
-                wait.Until(d =>
+                IClock iClock = new SystemClock();
+                var wait = new WebDriverWait(clock: iClock,
+                    driver: Engine.WebDriver,
+                    timeout: waitTimeSpan,
+                    sleepInterval: TimeSpan.FromMilliseconds(5)
+                    );
+                try
                 {
-                    return Engine.IsElementPresent(by);
-                });
-                return Engine.FindElement(by);
-            }
-            catch (TimeoutException)
-            {
-                return null;
-            }
-            catch (NoSuchElementException)
-            {
-                return null;
+                    wait.Until(d =>
+                    {
+                        return Engine.IsElementPresent(by);
+                    });
+                    return Engine.FindElement(by);
+                }
+                catch (WebDriverTimeoutException)
+                {
+                    return null;
+                }
+                catch (TimeoutException)
+                {
+                    return null;
+                }
+                catch (NoSuchElementException)
+                {
+                    return null;
+                }
             }
         }
 
@@ -783,28 +1165,39 @@ namespace Cactus.Drivers
             {
                 throw new Exception("No By was given to WaitUntilElementIsNotVisible");
             }
-            IClock iClock = new SystemClock();
-            var wait = new WebDriverWait(clock: iClock,
-                driver: Engine.WebDriver,
-                timeout: waitTimeSpan,
-                sleepInterval: TimeSpan.FromMilliseconds(5)
-                );
-            try
+            using (PerformanceTimer.Start(
+                timer => PerformanceTimer.LogTimeResult("WaitUntilElementIsNotVisible " + by, timer)))
             {
-                wait.Until(d => (Engine.FindElement(@by, safeMode: true) == null) || Engine.FindElement(@by, safeMode: true).Displayed == false);
-                return true;
-            }
-            catch (StaleElementReferenceException)
-            {
-                return true;
-            }
-            catch (TimeoutException)
-            {
-                return false;
-            }
-            catch (NoSuchElementException)
-            {
-                return true;
+                IClock iClock = new SystemClock();
+                var wait = new WebDriverWait(clock: iClock,
+                    driver: Engine.WebDriver,
+                    timeout: waitTimeSpan,
+                    sleepInterval: TimeSpan.FromMilliseconds(5)
+                    );
+                try
+                {
+                    wait.Until(
+                        d =>
+                            (Engine.FindElement(@by, safeMode: true) == null) ||
+                            Engine.FindElement(@by, safeMode: true).Displayed == false);
+                    return true;
+                }
+                catch (StaleElementReferenceException)
+                {
+                    return true;
+                }
+                catch (WebDriverTimeoutException)
+                {
+                    return false;
+                }
+                catch (TimeoutException)
+                {
+                    return false;
+                }
+                catch (NoSuchElementException)
+                {
+                    return true;
+                }
             }
         }
 
@@ -816,13 +1209,13 @@ namespace Cactus.Drivers
         /// <returns></returns>
         public static bool WaitUntilElementIsNotVisible(OpenQA.Selenium.By by, TimeSpan waitTimeSpan)
         {
+            if (@by == null)
+            {
+                throw new Exception("No By was given to WaitUntilElementIsNotVisible");
+            }
             using (PerformanceTimer.Start(
                 timer => PerformanceTimer.LogTimeResult("WaitUntilElementIsNotVisible " + by, timer)))
             {
-                if (@by == null)
-                {
-                    throw new Exception("No By was given to WaitUntilElementIsNotVisible");
-                }
                 IClock iClock = new SystemClock();
                 var wait = new WebDriverWait(clock: iClock,
                     driver: Engine.WebDriver,
@@ -850,9 +1243,17 @@ namespace Cactus.Drivers
                     });
                     return true;
                 }
+                catch (OpenQA.Selenium.InvalidSelectorException)
+                {
+                    return true;
+                }
                 catch (StaleElementReferenceException)
                 {
                     return true;
+                }
+                catch (WebDriverTimeoutException)
+                {
+                    return false;
                 }
                 catch (TimeoutException)
                 {
@@ -907,24 +1308,32 @@ namespace Cactus.Drivers
         /// <returns></returns>
         public static bool WaitUntilElementIsVisible(IWebElement element, TimeSpan waitTimeSpan)
         {
-            IClock iClock = new SystemClock();
-            var wait = new WebDriverWait(clock: iClock,
-                driver: Engine.WebDriver,
-                timeout: waitTimeSpan,
-                sleepInterval: TimeSpan.FromMilliseconds(5)
-                );
-            try
+            using (PerformanceTimer.Start(
+                timer => PerformanceTimer.LogTimeResult("WaitUntilElementIsVisible ", timer)))
             {
-                wait.Until(d => Engine.IsElementVisible(element));
-                return Engine.IsElementVisible(element);
-            }
-            catch (TimeoutException)
-            {
-                return false;
-            }
-            catch (NoSuchElementException)
-            {
-                return false;
+                IClock iClock = new SystemClock();
+                var wait = new WebDriverWait(clock: iClock,
+                    driver: Engine.WebDriver,
+                    timeout: waitTimeSpan,
+                    sleepInterval: TimeSpan.FromMilliseconds(5)
+                    );
+                try
+                {
+                    wait.Until(d => Engine.IsElementVisible(element));
+                    return Engine.IsElementVisible(element);
+                }
+                catch (WebDriverTimeoutException)
+                {
+                    return false;
+                }
+                catch (TimeoutException)
+                {
+                    return false;
+                }
+                catch (NoSuchElementException)
+                {
+                    return false;
+                }
             }
         }
         /// <summary>
@@ -935,25 +1344,32 @@ namespace Cactus.Drivers
         /// <returns></returns>
         public static IWebElement WaitUntilElementIsVisible(By by, TimeSpan waitTimeSpan)
         {
-
-            IClock iClock = new SystemClock();
-            var wait = new WebDriverWait(clock: iClock,
-                driver: Engine.WebDriver,
-                timeout: waitTimeSpan,
-                sleepInterval: TimeSpan.FromMilliseconds(5)
-                );
-            try
+            using (PerformanceTimer.Start(
+                timer => PerformanceTimer.LogTimeResult("WaitUntilElementIsVisible " + by, timer)))
             {
-                wait.Until(ExpectedConditions.ElementIsVisible(@by));
-                return Engine.FindElement(by);
-            }
-            catch (TimeoutException)
-            {
-                return null;
-            }
-            catch (NoSuchElementException)
-            {
-                return null;
+                IClock iClock = new SystemClock();
+                var wait = new WebDriverWait(clock: iClock,
+                    driver: Engine.WebDriver,
+                    timeout: waitTimeSpan,
+                    sleepInterval: TimeSpan.FromMilliseconds(5)
+                    );
+                try
+                {
+                    wait.Until(ExpectedConditions.ElementIsVisible(@by));
+                    return Engine.FindElement(by);
+                }
+                catch (WebDriverTimeoutException)
+                {
+                    return null;
+                }
+                catch (TimeoutException)
+                {
+                    return null;
+                }
+                catch (NoSuchElementException)
+                {
+                    return null;
+                }
             }
         }
 
@@ -969,24 +1385,32 @@ namespace Cactus.Drivers
             {
                 return null;
             }
-            IClock iClock = new SystemClock();
-            var wait = new WebDriverWait(clock: iClock,
-                driver: Engine.WebDriver,
-                timeout: waitTimeSpan,
-                sleepInterval: TimeSpan.FromMilliseconds(5)
-                );
-            try
+            using (PerformanceTimer.Start(
+                timer => PerformanceTimer.LogTimeResult("WaitUntilElementIsVisible " + by, timer)))
             {
-                wait.Until(ExpectedConditions.ElementIsVisible(@by));
-                return Engine.FindElement(by);
-            }
-            catch (TimeoutException)
-            {
-                return null;
-            }
-            catch (NoSuchElementException)
-            {
-                return null;
+                IClock iClock = new SystemClock();
+                var wait = new WebDriverWait(clock: iClock,
+                    driver: Engine.WebDriver,
+                    timeout: waitTimeSpan,
+                    sleepInterval: TimeSpan.FromMilliseconds(5)
+                    );
+                try
+                {
+                    wait.Until(ExpectedConditions.ElementIsVisible(@by));
+                    return Engine.FindElement(by);
+                }
+                catch (WebDriverTimeoutException)
+                {
+                    return null;
+                }
+                catch (TimeoutException)
+                {
+                    return null;
+                }
+                catch (NoSuchElementException)
+                {
+                    return null;
+                }
             }
         }
 
@@ -1009,41 +1433,56 @@ namespace Cactus.Drivers
         /// <param name="waitTimeSpan"></param>
         public static void WaitForButtonToBeDisabled(Control button, TimeSpan waitTimeSpan)
         {
-            IClock iClock = new SystemClock();
-            var wait = new WebDriverWait(clock: iClock,
-                driver: Engine.WebDriver,
-                timeout: waitTimeSpan,
-                sleepInterval: TimeSpan.FromMilliseconds(5)
-                );
-
-            var javascript = Engine.WebDriver as IJavaScriptExecutor;
-            if (javascript == null)
-                throw new ArgumentException("Driver must support javascript execution");
-
-            wait.Until(d =>
+            using (PerformanceTimer.Start(
+                timer => PerformanceTimer.LogTimeResult("WaitForButtonToBeDisabled " + button.MyBy, timer)))
             {
-                try
+                IClock iClock = new SystemClock();
+                var wait = new WebDriverWait(clock: iClock,
+                    driver: Engine.WebDriver,
+                    timeout: waitTimeSpan,
+                    sleepInterval: TimeSpan.FromMilliseconds(5)
+                    );
+
+                var javascript = Engine.WebDriver as IJavaScriptExecutor;
+                if (javascript == null)
+                    throw new ArgumentException("Driver must support javascript execution");
+
+                wait.Until(d =>
                 {
-                    return !button.IsEnabled;
-                }
-                catch (InvalidOperationException invalidOperationException)
-                {
-                    //Window is no longer available
-                    return invalidOperationException.Message.ToLower().Contains("unable to get browser");
-                }
-                catch (WebDriverException webDriverException)
-                {
-                    //Browser is no longer available
-                    return webDriverException.Message.ToLower().Contains("unable to connect");
-                }
-                catch
-                {
-                    return false;
-                }
-            });
+                    try
+                    {
+                        return !button.IsEnabled;
+                    }
+                    catch (InvalidOperationException invalidOperationException)
+                    {
+                        //Window is no longer available
+                        return invalidOperationException.Message.ToLower().Contains("unable to get browser");
+                    }
+                    catch (WebDriverException webDriverException)
+                    {
+                        //Browser is no longer available
+                        return webDriverException.Message.ToLower().Contains("unable to connect");
+                    }
+                    catch
+                    {
+                        return false;
+                    }
+                });
+            }
         }
         #endregion
 
+        public static string GetParentBuildNumber()
+        {
+            try
+            {
+                return Environment.GetEnvironmentVariable("PARENT_BUILD_NUMBER") ?? File.ReadAllText(@"c:\parentBuildNumber.txt");
+            }
+            catch (Exception)
+            {
+                return "";
+            }
+        }
 
         /// <summary>
         /// This method will use javaScript to return an absolute XPATH locater based on an IWebElement
@@ -1052,7 +1491,7 @@ namespace Cactus.Drivers
         /// </summary>
         /// <param name="element">Element already shown on page</param>
         /// <returns></returns>
-        public object GenerateXpathFromElement(IWebElement element)
+        public static string GenerateXpathFromElement(IWebElement element)
         {
 
             var script =
@@ -1175,24 +1614,6 @@ namespace Cactus.Drivers
             return count;
         }
 
-
-        public static IWebDriver GetDriver(IWebElement element)
-        {
-            IWrapsDriver wrappedElement = element as IWrapsDriver;
-            if (wrappedElement == null)
-            {
-                FieldInfo fieldInfo = element.GetType().GetField("underlyingElement", BindingFlags.NonPublic | BindingFlags.Instance);
-                if (fieldInfo != null)
-                {
-                    wrappedElement = fieldInfo.GetValue(element) as IWrapsDriver;
-                    if (wrappedElement == null)
-                        throw new ArgumentException("Element must wrap a web driver", "element");
-                }
-            }
-
-            return wrappedElement.WrappedDriver;
-        }
-
         /// <summary>
         /// Generate a random string value, input the length of the integer passed to it
         /// </summary>
@@ -1272,7 +1693,6 @@ namespace Cactus.Drivers
             }
         }
 
-        #region Verify Methods
         /// <summary>
         ///   Method verifies that the current browser Title contains the string and returns
         ///   true or false depending on the state
@@ -1313,7 +1733,22 @@ namespace Cactus.Drivers
             return currentUrl.ToLower().Contains(urlPartialString.ToLower());
         }
 
-        #endregion
+        public static string GetPublicIP()
+        {
+            String direction = "";
+            WebRequest request = WebRequest.Create("http://checkip.dyndns.org/");
+            using (WebResponse response = request.GetResponse())
+            using (StreamReader stream = new StreamReader(response.GetResponseStream()))
+            {
+                direction = stream.ReadToEnd();
+            }
 
+            //Search for the ip in the html
+            int first = direction.IndexOf("Address: ") + 9;
+            int last = direction.LastIndexOf("</body>");
+            direction = direction.Substring(first, last - first);
+
+            return direction;
+        }
     }
 }

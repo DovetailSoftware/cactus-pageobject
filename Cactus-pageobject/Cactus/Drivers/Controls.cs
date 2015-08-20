@@ -6,6 +6,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -14,6 +15,7 @@ using System.Xml;
 using System.Xml.XPath;
 using Cactus.Infrastructure;
 using HtmlTags;
+using HtmlTags.Reflection;
 using OpenQA.Selenium;
 using OpenQA.Selenium.Interactions;
 using OpenQA.Selenium.Interactions.Internal;
@@ -128,6 +130,16 @@ namespace Cactus.Drivers
                         break;
                 }
             }
+            catch (WebDriverException webDriverException)
+            {
+                _logger.LogException(webDriverException);
+                throw;
+            }
+            catch (XPathException xPathException)
+            {
+                _logger.LogException(xPathException);
+                throw;
+            }
             catch (Exception)
             {
                 //ignore
@@ -140,6 +152,15 @@ namespace Cactus.Drivers
         /// <param name="element"></param>
         public Control(IWebElement element) : this()
         {
+            try
+            {
+                MyBy = OpenQA.Selenium.By.XPath(Support.GenerateXpathFromElement(element));
+            }
+            catch
+            {
+                MyBy = OpenQA.Selenium.By.Name("NoBy");
+            }
+
             _element = element;
         }
 
@@ -322,16 +343,36 @@ namespace Cactus.Drivers
         }
 
         /// <summary>
+        /// Performs a straight-foward Element.Click with logging and exception handling.
+        /// </summary>
+        public void ClickSimple()
+        {
+            try
+            {
+                _logger.LogDebug("Clicking || " + MyBy);
+                getElement(safeMode: true, refreshElement: true);
+                _element.Click();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(MyBy + " could not be clicked ", ex);
+                Support.ScreenShot();
+                throw;
+            }
+        }
+
+        /// <summary>
         /// Click the element attached to this call
         /// </summary>
         /// <param name="actionClick"></param>
         /// <param name="waitForDisappearance"></param>
-        public void Click(bool actionClick = true, bool waitForDisappearance = false)
+                /// <param name="highlight"></param>
+        public void Click(bool actionClick = true, bool waitForDisappearance = false, bool highlight = true)
         {
             var action = new Actions(Engine.WebDriver);
 
             Support.WaitForPageReadyState();
-            getElement(safeMode: true, refreshElement: true);
+            getElement(highlight: highlight, safeMode: true, refreshElement: true);
             if (_element == null) // for stability of test runs
             {
                 Support.WaitUntilElementIsVisible(MyBy);
@@ -386,6 +427,7 @@ namespace Cactus.Drivers
             catch (StaleElementReferenceException)
             {
                 _element = Engine.WebDriver.FindElement(MyBy);
+                _logger.LogError(MyBy + " was stale, trying WebDriver click now ");
                 _element.Click();
             }
             catch (InvalidOperationException invalidOperationException)
@@ -820,7 +862,10 @@ namespace Cactus.Drivers
                     }
                     var columnCount = _element.FindElements(OpenQA.Selenium.By.TagName("tr"));
                     if (columnCount == null || columnCount.Count < 2)
-                        Thread.Sleep(1000);  //todo replace with waitfor 
+                    {
+                        // wait for the rows to show up.
+                        Support.WaitUntilChildElementsArePresent(_element, OpenQA.Selenium.By.TagName("tr"), countGreaterThan: 1);
+                    }
                     // use preformed columns.
                     foreach (var tr in _element.FindElements(OpenQA.Selenium.By.TagName("tr")))
                     {
@@ -1382,6 +1427,11 @@ namespace Cactus.Drivers
             }
             try
             {
+                if (MyBy == null)
+                {
+                    Support.ScreenShot();
+                    throw new ArgumentNullException("by cannot be null : HowUsed {" + HowUsed + "}");
+                }
                 if (how == How.XPath)
                     AssertValidXpath(selector);
 
@@ -1396,6 +1446,9 @@ namespace Cactus.Drivers
                     _logger.LogDebug("Timed out looking for " + selector);
                 }
                 _element = Engine.WebDriver.FindElement(MyBy);
+                Support.WaitForPageReadyState();
+                if (highlight && _element != null)
+                    Highlight();
             }
             catch (NoSuchElementException)
             {
@@ -1470,6 +1523,9 @@ namespace Cactus.Drivers
             }
             try
             {
+                if (how == How.XPath)
+                    AssertValidXpath(selector);
+
                 Engine.CurrentControl = this;
                 //Support.DetectErrors();
                 var wait = new WebDriverWait(Engine.WebDriver, TimeSpan.FromSeconds(4));
@@ -1731,6 +1787,7 @@ namespace Cactus.Drivers
                     return false;
                 try
                 {
+                    Support.WaitForPageReadyState();
                     _element = Engine.WebDriver.FindElement(MyBy);
                 }
                 catch
@@ -1782,6 +1839,60 @@ namespace Cactus.Drivers
                 }
                 return _element.Displayed;
             }
+        }
+
+        /// <summary>
+        /// Returns if the Element is in the Correct Location 
+        /// </summary>
+        /// <param name="point">System.Draw.Point</param>
+        /// <returns></returns>
+        public bool IsElementInCorrectLocation(Point point)
+        {
+            getElement(highlight: false);
+            return _element.Location == point;
+        }
+
+        /// <summary>
+        /// Returns if the Element is in the Correct Location 
+        /// </summary>
+        /// <param name="x">int</param>
+        /// <param name="y">int</param>
+        /// <returns></returns>
+        public bool IsElementInCorrectLocation(int x, int y)
+        {
+            var point = new Point
+            {
+                X = x,
+                Y = y
+            };
+            getElement(highlight: false);
+            return _element.Location == point;
+        }
+
+        /// <summary>
+        /// Returns if the Element is in the Correct Location 
+        /// </summary>
+        /// <param name="topX">int</param>
+        /// <param name="topY">int</param>
+        /// <param name="bottomX">int</param>
+        /// <param name="bottomY">int</param>
+        /// <returns></returns>
+        public bool IsElementInCorrectLocation(int topX, int topY, int bottomX, int bottomY)
+        {
+
+            getElement(highlight: false);
+
+            if ((topX < _element.Location.X) &&
+                (bottomX > _element.Location.X) &&
+                (topY < _element.Location.Y) &&
+                (bottomY > _element.Location.Y))
+            {
+                return true;
+            }
+            // Log error for debugging needs.
+            _logger.LogError("Element is in wrong location." + Environment.NewLine +
+                             "Element is at X:" + _element.Location.X + " Y:" + _element.Location.Y);
+            return false;
         }
 
         /// <summary>
@@ -2282,21 +2393,29 @@ namespace Cactus.Drivers
         /// <param name="javaScript"></param>
         public void HoverOver(bool javaScript = true)
         {
-            if (javaScript)
+            try
             {
-                const string script = "var evObj = document.createEvent('MouseEvents');" +
-                                      "evObj.initMouseEvent(\"mouseover\",true, false, window, 0, 0, 0, 0, 0, false, false, false, false, 0, null);" +
-                                      "arguments[0].dispatchEvent(evObj);";
-                Engine.Execute<object>(Engine.WebDriver, script, _element);
+                if (javaScript)
+                {
+                    const string script = "var evObj = document.createEvent('MouseEvents');" +
+                                          "evObj.initMouseEvent(\"mouseover\",true, false, window, 0, 0, 0, 0, 0, false, false, false, false, 0, null);" +
+                                          "arguments[0].dispatchEvent(evObj);";
+                    Engine.Execute<object>(Engine.WebDriver, script, _element);
+                }
+                else
+                {
+                    getElement(highlight: false);
+                    new Actions(Engine.WebDriver)
+                        .MoveToElement(_element, 1, 1)
+                        .Build()
+                        .Perform();
+                }
             }
-            else
+            catch (Exception)
             {
-                getElement(highlight: false);
-                new Actions(Engine.WebDriver)
-                    .MoveToElement(_element, 0, 0)
-                    .Build()
-                    .Perform();
+                //ignore all errors on Hover.
             }
+           
         }
 
         /// <summary>
@@ -2330,6 +2449,7 @@ namespace Cactus.Drivers
             get
             {
                 getElement(highlight: false);
+                _logger.LogDebug("Location of element : " + MyBy + " is " + _element.Location);
                 return _element.Location;
             }
         }
@@ -2675,21 +2795,33 @@ namespace Cactus.Drivers
                 // Mcdropdown on the Case nav pages:
                 Engine.Execute<object>("$('div[data-list-name=" + dataListName + "]').find('input[type=text]').val('" +
                                        value.Replace(": ", ":") + "').trigger('selected');");
+
                 Engine.Execute<object>("$('div[data-list-name=" + dataListName +
                                        "]').find('input[type=text]').siblings('input[type=hidden]').val('" +
                                        value.Replace(": ", ":") + "').trigger('selected');");
             }
-            if (inlineEditable)
+                       if (inlineEditable)
             {
                 try
                 {
-                    _element.SendKeys(Keys.Tab);
+                    switch (Engine.Browser)
+                    {
+                        case SupportedBrowserType.Chrome:
+                            Engine.FindElement(By.TagName("body")).SendKeys(Keys.Tab);
+                            break;
+                        case SupportedBrowserType.Firefox:
+                        case SupportedBrowserType.Ie:
+                            Engine.FindElement(By.TagName("html")).SendKeys(Keys.Tab);
+                            break;
+                    }
                 }
-                catch (Exception)
+                catch
                 {
+                    //ignore
                 }
             }
             Support.WaitForPageReadyState();
+            Support.WaitForAjaxToComplete();
         }
 
         /// <summary>
@@ -2702,7 +2834,6 @@ namespace Cactus.Drivers
             using (PerformanceTimer.Start(
                 ts => PerformanceTimer.LogTimeResult("SendKeys " + selector, ts)))
             {
-                var inlineEditable = true;
                 Support.WaitForPageReadyState();
                 getElement();
                 try
@@ -2812,7 +2943,7 @@ namespace Cactus.Drivers
             using (PerformanceTimer.Start(
                 ts => PerformanceTimer.LogTimeResult("SendKeys " + selector, ts)))
             {
-                getElement();
+                getElement(highlight: false);
                 try
                 {
                     // check for editable (clickable) element textbox type
@@ -2823,7 +2954,7 @@ namespace Cactus.Drivers
                         regularClick.Perform();
 
                         Thread.Sleep(100);
-                        getElement(); // re-get element.
+                        getElement(highlight: false); // re-get element.
 
                         // if the BY for this is given as the actual redactor control.
                         if (_element.GetAttribute("class").Contains("redactor-editor"))
@@ -3141,7 +3272,13 @@ namespace Cactus.Drivers
                             if (li.Text.Equals(text))
                             {
                                 new Actions(Engine.WebDriver)
-                                    .MoveToElement(li, 0, 0)
+                                    .MoveToElement(li, 3, 3)
+                                    .Build()
+                                    .Perform();
+                                Thread.Sleep(40);
+                                // double hover (scroll to) and single click.
+                                new Actions(Engine.WebDriver)
+                                    .MoveToElement(li, 3, 3)
                                     .Click()
                                     .Build()
                                     .Perform();
@@ -3157,7 +3294,14 @@ namespace Cactus.Drivers
                             if (li.Text.ToLower().Equals(text.ToLower()))
                             {
                                 new Actions(Engine.WebDriver)
-                                    .MoveToElement(li, 0, 0)
+                                    .MoveToElement(li, 3, 3)
+                                    .Build()
+                                    .Perform();
+                                Thread.Sleep(40);
+                                // double hover (scroll to) and single click.
+
+                                new Actions(Engine.WebDriver)
+                                    .MoveToElement(li, 3, 3)
                                     .Click()
                                     .Build()
                                     .Perform();
@@ -3172,11 +3316,34 @@ namespace Cactus.Drivers
                 {
                     try
                     {
-                        var select = new SelectElement(_element);
+                        Support.WaitForPageReadyState();
+                        SelectElement select;
+                        try
+                        {
+                            select = new SelectElement(_element);
+                        }
+                        catch (UnexpectedTagNameException unexpectedTagNameException)
+                        {
+                            _logger.LogError("The Dropdown was incorrectly done.", unexpectedTagNameException);
+                            getElement(highlight: false, refreshElement: true);
+                            _element.Click();
+                            getElement(highlight: false, refreshElement: true);
+                            select = new SelectElement(_element);
+                        }
+
+                        // for javascript data
+                        Support.WaitForPageReadyState();
+                        Support.WaitUntilChildElementIsPresent(_element,
+                            OpenQA.Selenium.By.XPath(".//option[text()='" + text + "']"));
+
                         var option = Engine.FindChildElement(_element, OpenQA.Selenium.By.XPath(".//option[text()='" + text + "']"));
                         if (option.Displayed)
                         {
                             select.SelectByText(text);
+                            if (Engine.Browser == SupportedBrowserType.Firefox)
+                            {
+                                _element.SendKeys(Keys.Enter);
+                            }
                             Thread.Sleep(100);// for javascript
                             Support.WaitForPageReadyState();
                             if (inlineEditable)
@@ -3202,6 +3369,7 @@ namespace Cactus.Drivers
                                 }
                                 
                             }
+
                         }
                         else
                         {
@@ -3531,6 +3699,18 @@ namespace Cactus.Drivers
             getElement();
             try
             {
+                if (Engine.Browser == SupportedBrowserType.Ie)
+                {
+                    if (!_element.Displayed)
+                    {
+                        var opacity = _element.GetCssValue("opacity");
+                        if (string.IsNullOrEmpty(opacity) || opacity == "0")
+                        {
+                            SetAttribute("style", "opacity: 1");
+                        }
+                        getElement();
+                    }
+                }
                 if (text == "TAB")
                 {
                    _element.SendKeys(Keys.Tab);
@@ -3711,14 +3891,14 @@ namespace Cactus.Drivers
         public void Supapicka(string name)
         {
             Support.WaitForPageReadyState();
-            getElement();
+            getElement(refreshElement:true);
             try
             {
                 var startButton = _element;
                 if (_element.TagName != "a")
                 {
                     startButton = Engine.FindChildElement(_element,
-                        OpenQA.Selenium.By.XPath(".//button[contains(text(),'Select')]"));
+                        OpenQA.Selenium.By.XPath(".//button[contains(text(),'Select') and contains(@class,'ui-button') and not(ancestor::*[contains(@style,'display:none')]) and not(ancestor::*[contains(@style,'display: none')])]"));
                 }
 
                 if (startButton == null)
@@ -3795,7 +3975,7 @@ namespace Cactus.Drivers
         public IWebDriver SwitchToIframe()
         {
             Engine.SwitchOutofiFrames();
-            getElement();
+            getElement(highlight: false);
             var iFrame = _element;
             if (iFrame == null)
             {

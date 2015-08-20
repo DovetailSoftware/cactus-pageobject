@@ -221,7 +221,10 @@ namespace Cactus.Drivers
 
             if (resultDataTable.Rows.Cast<DataRow>().Select(row => row["Result"].ToString() != "Passed").Any())
             {   // this will be a fail, so take a screenshot.
-                Support.ScreenShot();
+                if (Engine.WebDriver != null)
+                {
+                    Support.ScreenShot();
+                }
             }
 
             resultDataTable.AsEnumerable().AssertAll((DataRow row) => Assert.That(row["Result"].ToString() == "Passed"
@@ -273,16 +276,16 @@ namespace Cactus.Drivers
         /// <param name="dataListFromTestCase"></param>
         /// <param name="dataListShouldBe"></param>
         /// <returns></returns>
-        public static bool CompareLists<T>(this ICollection<T> dataListFromTestCase, ICollection<T> dataListShouldBe)
+        public static bool CompareLists<T>(this IEnumerable<T> dataListFromTestCase, IEnumerable<T> dataListShouldBe)
         {
             // 1
             // Require that the counts are equal
-            if (dataListFromTestCase.Count != dataListShouldBe.Count)
+            if (dataListFromTestCase.Count() != dataListShouldBe.Count())
             {
                 Support.ScreenShot();
-                Assert.Fail(string.Format("The list count should have been {0}, but was {1}{2}Data from Test Was: [{3}]{2}Should have been:[{4}]", 
-                    dataListShouldBe.Count, 
-                    dataListFromTestCase.Count,
+                Assert.Fail(string.Format("The list count should have been {0}, but was {1}{2}Data from Test Was: [{3}]{2}Should have been:[{4}]",
+                    dataListShouldBe.Count(),
+                    dataListFromTestCase.Count(),
                     Environment.NewLine,
                     string.Join(",", dataListFromTestCase.Select(i=>i.ToString()).ToArray()),
                     string.Join(",", dataListShouldBe.Select(i=>i.ToString()).ToArray())
@@ -335,10 +338,13 @@ namespace Cactus.Drivers
             {
                 if (v != 0)
                 {
-                    Support.ScreenShot();
+                    if (Engine.WebDriver != null)
+                    {
+                        Support.ScreenShot();
+                    }
                     Assert.Fail(string.Format("The list count should have been {0}, but was {1}{2}Data from Test Was: [{3}]",
-                                        dataListShouldBe.Count,
-                                        dataListFromTestCase.Count,
+                                        dataListShouldBe.Count(),
+                                        dataListFromTestCase.Count(),
                                         Environment.NewLine,
                                         d));
                 }
@@ -444,6 +450,64 @@ namespace Cactus.Drivers
             return null;
         }
 
+           /// <summary>
+        /// Just to make our testing easier, all ourselves to use the real SequenceEquals
+        /// call from LINQ to Objects.
+        /// </summary>
+        public static void AssertSequenceEqual<T>(this IEnumerable<T> actual, IEnumerable<T> expected)
+        {
+            Assert.IsTrue(actual.SequenceEqual(expected), "FAIL: " + "Expected: " +
+                    ",".InsertBetween(expected.Select(x => Convert.ToString(x))) + "; " + Environment.NewLine + "was: " +
+                    ",".InsertBetween(actual.Select(x => Convert.ToString(x))));
 
+            new UxTestingLogger().LogInfo("PASS: " + "Expected: " +
+                    ",".InsertBetween(expected.Select(x => Convert.ToString(x))) + "; " + Environment.NewLine + "was: " +
+                    ",".InsertBetween(actual.Select(x => Convert.ToString(x))));
+
+            new TestLineStatusWithEvent().Status(TestStatus.Passed);
+        }
+
+        /// <summary>
+        /// Make testing even easier - a params array makes for readable tests :)
+        /// The sequence is evaluated exactly once.
+        /// </summary>
+        public static void AssertSequenceEqual<T>(this IEnumerable<T> actual, params T[] expected)
+        {
+            // Working with a copy means we can look over it more than once.
+            // We're safe to do that with the array anyway.
+            var copy = actual.ToList();
+            var result = copy.SequenceEqual(expected);
+            // Looks nicer than Assert.IsTrue or Assert.That, unfortunately.
+            if (!result)
+            {
+                Assert.Fail("Expected: " +
+                    ",".InsertBetween(expected.Select(x => Convert.ToString(x))) + "; was: " +
+                    ",".InsertBetween(copy.Select(x => Convert.ToString(x))));
+            }
+
+            new UxTestingLogger().LogInfo("PASS: " + "Expected: " +
+                    ",".InsertBetween(expected.Select(x => Convert.ToString(x))) + "; " + Environment.NewLine + "was: " +
+                    ",".InsertBetween(actual.Select(x => Convert.ToString(x))));
+        }
+
+        public static string InsertBetween(this string delimiter, IEnumerable<string> items)
+        {
+            var builder = new StringBuilder();
+            foreach (var item in items)
+            {
+                if (builder.Length != 0)
+                {
+                    builder.Append(delimiter);
+                }
+                builder.Append(item);
+            }
+            return builder.ToString();
+        }
+
+        public static IEnumerable<string> GenerateSplits(this string str, params char[] separators)
+        {
+            foreach (var split in str.Split(separators))
+                yield return split;
+        }
     }
 }

@@ -33,25 +33,32 @@ namespace Cactus.Drivers
     public class Engine : IDisposable
     {
         public const SupportedBrowserType DefaultBrowserType = SupportedBrowserType.Chrome;
-        static string _lastMessage = String.Empty;
+        private static string _lastMessage = String.Empty;
         //public static IWebDriver WebDriver;
         public static EventFiringWebDriver WebDriver;
         public static bool Status = true;
         public static string GlobalConfigurationFilePath = @"c:\SeleniumDriverConfig.xml";
         public static dynamic CurrentControl;
         public static SupportedBrowserType Browser;
-        static string _driverType;
-        static readonly object _lock = new object();
+        private static string _driverType;
+        private static readonly object _lock = new object();
         public string Url = String.Empty;
         public string Version;
         public static string BaseUrl { get; set; }
-        static UxTestingLogger _log;
-        public static UxTestingLogger Log { get { return _log; } }
+        public static string ServerHost { get; set; }
+        private static UxTestingLogger _log;
+
+        public static UxTestingLogger Log
+        {
+            get { return _log; }
+        }
 
         public Engine()
         {
             _log = new UxTestingLogger();
+            ServerHost = ConfigurationManager.AppSettings["ServerHost"];
         }
+
         ~Engine()
         {
             // AppDomain.CurrentDomain.FirstChanceException -= ExceptionWatcher;
@@ -122,15 +129,21 @@ namespace Cactus.Drivers
                     startAsBrowser(GetBrowserType);
                     if (WebDriver != null)
                     {
-                        Engine.WebDriver.ExceptionThrown += new SeleniumEventHandlers().firingDriver_ExceptionThrown;
-                        Engine.WebDriver.Navigating += new SeleniumEventHandlers().firingDriver_Navigating;
+                        WebDriver.ExceptionThrown += new SeleniumEventHandlers().firingDriver_ExceptionThrown;
+                        WebDriver.Navigating += new SeleniumEventHandlers().firingDriver_Navigating;
                     }
                     return;
                 }
 
-                var test = GetCurrentUrl;  // if this has a value, no need to get new browser.
+                var test = GetCurrentUrl; // if this has a value, no need to get new browser.
+                if (test != null) return;
+
+                Thread.Sleep(5000); // give browser more time to start up
+                test = GetCurrentUrl; // if this has a value, no need to get new browser.
                 if (test == null)
+                {
                     startAsBrowser(GetBrowserType);
+                }
             }
             catch
             {
@@ -208,7 +221,7 @@ namespace Cactus.Drivers
             }
         }
 
-        static SupportedBrowserType GetBrowserType
+        private static SupportedBrowserType GetBrowserType
         {
             get
             {
@@ -229,6 +242,8 @@ namespace Cactus.Drivers
                     if (!string.IsNullOrEmpty(fileData))
                     {
                         Log.LogInfo(fileData.Trim() + " Selected for browser");
+                        if (fileData.ToLower().Contains("edge"))
+                            return SupportedBrowserType.Edge;
                         if (fileData.ToLower().Contains("chrome"))
                             return SupportedBrowserType.Chrome;
                         if (fileData.ToLower().Contains("firefox"))
@@ -241,6 +256,8 @@ namespace Cactus.Drivers
                     if (!string.IsNullOrEmpty(environmentData))
                     {
                         Log.LogInfo(environmentData.Trim() + " Selected for browser");
+                        if (environmentData.ToLower().Contains("edge"))
+                            return SupportedBrowserType.Edge;
                         if (environmentData.ToLower().Contains("chrome"))
                             return SupportedBrowserType.Chrome;
                         if (environmentData.ToLower().Contains("firefox"))
@@ -267,23 +284,28 @@ namespace Cactus.Drivers
             try
             {
                 var isJenkins = Environment.GetEnvironmentVariable("isjenkins");
-                if (!string.IsNullOrEmpty(isJenkins) && isJenkins.ToLower() == "true")
+                if (string.IsNullOrEmpty(isJenkins))
+                {
+                    WebDriver.Manage().Window.Maximize();
+                }
+                else if (isJenkins == "true")
                 {
                     var size = new Size(1920, 2200);
                     Log.LogInfo("Setting the browser window size to {0}", size);
                     Engine.Execute<object>("window.resizeTo(1920, 2080);");
+                    WebDriver.Manage().Window.Size = size;
                 }
                 else
                 {
-                    Engine.WebDriver.Manage().Window.Maximize();
+                    WebDriver.Manage().Window.Maximize();
                 }
-                var resizedSize = Engine.WebDriver.Manage().Window.Size;
+                var resizedSize = WebDriver.Manage().Window.Size;
                 Log.LogInfo("Browser window size is {0}x{1}", resizedSize.Width, resizedSize.Height);
 
             }
             catch (Exception ex)
             {
-                var resizedSize = Engine.WebDriver.Manage().Window.Size;
+                var resizedSize = WebDriver.Manage().Window.Size;
                 Log.LogError(
                     string.Format("ERROR: Browser window size is {0}x{1}", resizedSize.Width, resizedSize.Height),
                     exception: ex);
@@ -304,7 +326,7 @@ namespace Cactus.Drivers
                     wait.Until(d =>
                     {
                         var isjQueryLoaded =
-                            (bool)((RemoteWebDriver)d).ExecuteScript("return typeof $ !== 'undefined';");
+                            (bool) ((RemoteWebDriver) d).ExecuteScript("return typeof $ !== 'undefined';");
                         return isjQueryLoaded;
                     });
                 }
@@ -342,15 +364,23 @@ namespace Cactus.Drivers
         }
 
 
-        public static Engine SetupEngine(SupportedBrowserType browserType, string url = "", string driverType = "local")
+        public static Engine SetupEngine(SupportedBrowserType browserType, string Url = "", string driverType = "Local")
         {
             var startEngine = new Engine();
 
+            startEngine.Url = String.IsNullOrEmpty(Url) ? "default" : Url;
 
-            startEngine.Url = String.IsNullOrEmpty(url) ? "default" : url;
-            BaseUrl = String.IsNullOrEmpty(url) ? "http://localhost.com/" : url;
-            Debug.WriteLine(startEngine.Url);
-            Engine.Browser = browserType;
+            try
+            {
+                Engine.Browser = browserType;
+                Log.LogDebug(browserType + " Setup Engine Selected.");
+            }
+            catch (Exception ex)
+            {
+                Log.LogError("SetupEngine: " + ex);
+                Engine.Browser = DefaultBrowserType;
+                Log.LogDebug(DefaultBrowserType + " Setup Engine Selected by default.");
+            }
 
             _driverType = String.IsNullOrEmpty(driverType) ? "Local" : driverType;
 
@@ -360,19 +390,87 @@ namespace Cactus.Drivers
                                     " is missing OR you can also please put 'DriverType' settings in Config File.");
             }
 
-            #region driver_contruction
-
-            Debug.WriteLine("Loading browser: " + Engine.Browser);
+            // Determine what Type of Drivers to use.  Local , Remote, or BrowserStack
             if (_driverType.ToLower() == "local")
             {
+                BaseUrl = String.IsNullOrEmpty(Url) ? ServerHost + "agent/" : Url;
+                Log.LogDebug(startEngine.Url);
+            }
+            else if (_driverType.ToLower().Contains("browser"))
+            {
+
+            }
+            else //"remote"
+            {
+
+            }
+
+            #region driver_contruction
+
+            #region Use Local Driver
+
+            if (_driverType.ToLower() == "local")
+            {
+                Log.LogDebug("Loading browser: " + Engine.Browser);
+
+                BaseUrl = String.IsNullOrEmpty(Url) ? ServerHost + "agent/" : Url;
+                Log.LogDebug(startEngine.Url);
+
                 if (Engine.Browser == SupportedBrowserType.Ie) // Internet Explorer
                 {
-                    // clearIECache(); //optional
-                    Engine.WebDriver = new EventFiringWebDriver(new InternetExplorerDriver(BrowserSetup.SetupInternetExplorerOptions));
+                    if (!File.Exists(Environment.CurrentDirectory + "/IEDriverServer.exe"))
+                    {
+                        const string file = "C:\\GIT\\Blue\\tools\\Selenium\\IEDriverServer.exe";
+                        File.Copy(file, Environment.CurrentDirectory + "\\IEDriverServer.exe", true);
+                    }
+                    //System.Environment.SetEnvironmentVariable("webdriver.ie.driver", "D://Software//IEDriverServer.exe"); IWebDriver driver = new InternetExplorerDriver(); 
+                    var options = new InternetExplorerOptions()
+                    {
+                        InitialBrowserUrl = startEngine.Url,
+                        IntroduceInstabilityByIgnoringProtectedModeSettings = true,
+                        IgnoreZoomLevel = true,
+                        UnexpectedAlertBehavior = InternetExplorerUnexpectedAlertBehavior.Accept,
+                        RequireWindowFocus = false,
+                        EnablePersistentHover = true,
+                        EnableNativeEvents = true,
+                        EnsureCleanSession = true
+                    };
+
+                    clearIECache();
+                    Engine.WebDriver =
+                        new EventFiringWebDriver(new InternetExplorerDriver(Environment.CurrentDirectory, options,
+                            TimeSpan.FromMinutes(5)));
+                    Thread.Sleep(6000); // Browser load for IE on Jenkins is very slow.
+                    Support.WaitForUrlToContain("/");
                 }
                 else if (Engine.Browser == SupportedBrowserType.Chrome) //Google Chrome
                 {
-                    Engine.WebDriver = new EventFiringWebDriver(new ChromeDriver());
+                    if (File.Exists(Environment.CurrentDirectory + "/chromedriver.exe"))
+                    {
+                        Engine.WebDriver = new EventFiringWebDriver(new ChromeDriver());
+                    }
+                    else
+                    {
+                        Debug.WriteLine(
+                            Directory.GetParent(
+                                Directory.GetParent(Directory.GetParent(Directory.GetCurrentDirectory()).ToString())
+                                    .ToString()).ToString());
+
+                        // copy from 
+                        const string file = "C:\\GIT\\Blue\\tools\\Selenium\\chromedriver.exe";
+
+                        File.Copy(file, Environment.CurrentDirectory + "\\chromedriver.exe", true);
+                        try
+                        {
+                            Engine.WebDriver = new EventFiringWebDriver(new ChromeDriver());
+                        }
+                        catch
+                            (Exception)
+                        {
+                            Debug.WriteLine(Environment.CurrentDirectory + " does not contain Chrome Browser.");
+                            throw;
+                        }
+                    }
                 }
                 else if (Engine.Browser == SupportedBrowserType.Firefox) // Firefox
                 {
@@ -388,16 +486,26 @@ namespace Cactus.Drivers
                     Engine.WebDriver = new EventFiringWebDriver(new FirefoxDriver(new FirefoxProfile()));
                 }
             }
+                #endregion
+
+                #region Use Remote Driver
+
             else if (_driverType.ToLower() == "remote")
             {
-                DesiredCapabilities browserCap = null;
+                var myIp = Support.GetPublicIP();
+
+                BaseUrl = String.IsNullOrEmpty(Url) ? string.Format("http://{0}/agent/", myIp) : Url;
+                Log.LogDebug(startEngine.Url);
+
+                DesiredCapabilities browserCap;
 
                 if (Engine.Browser == SupportedBrowserType.Ie)
                 {
                     browserCap = BrowserSetup.SetupInternetExplorer;
                     var host = "http://127.0.0.1";
                     var port = 9515;
-                    Engine.WebDriver = new EventFiringWebDriver(new RemoteWebDriver(new Uri(host + ":" + port), browserCap));
+                    Engine.WebDriver =
+                        new EventFiringWebDriver(new RemoteWebDriver(new Uri(host + ":" + port), browserCap));
                 }
                 else if (Engine.Browser == SupportedBrowserType.Chrome)
                 {
@@ -406,7 +514,8 @@ namespace Cactus.Drivers
                     var port = 9515;
                     //var timeout = 5000;  // 5 seconds.
 
-                    Engine.WebDriver = new EventFiringWebDriver(new RemoteWebDriver(new Uri(host + ":" + port), browserCap));
+                    Engine.WebDriver =
+                        new EventFiringWebDriver(new RemoteWebDriver(new Uri(host + ":" + port), browserCap));
                     Engine.WebDriver.Navigate().GoToUrl(startEngine.Url);
                 }
                 else
@@ -414,9 +523,59 @@ namespace Cactus.Drivers
                     browserCap = BrowserSetup.SetupFirefox;
                     var host = "http://127.0.0.1";
                     var port = 9515;
-                    Engine.WebDriver = new EventFiringWebDriver(new RemoteWebDriver(new Uri(host + ":" + port), browserCap));
+                    Engine.WebDriver =
+                        new EventFiringWebDriver(new RemoteWebDriver(new Uri(host + ":" + port), browserCap));
                 }
             }
+                #endregion
+
+                #region Use Browser Stack Driver
+
+            else if (_driverType.ToLower() == "browerstack")
+            {
+                var myIp = Support.GetPublicIP();
+
+                BaseUrl = String.IsNullOrEmpty(Url) ? string.Format("http://{0}/agent/", myIp) : Url;
+                Debug.WriteLine(startEngine.Url);
+
+                const string browserstackHost = "http://hub.browserstack.com:80/wd/hub/";
+                DesiredCapabilities browserCap;
+                // Environment Variable OR File Contents.
+                // Backup is to the use Configuration Settings from App.Config.
+                var project = string.Empty;
+                var build = string.Empty;
+                var name = string.Empty;
+
+                try
+                {
+                    project = File.Exists(@"c:\project.txt")
+                        ? File.ReadAllText(@"c:\project.txt")
+                        : ConfigurationManager.AppSettings["browserStack.project"];
+                    build = File.Exists(@"c:\build.txt")
+                        ? File.ReadAllText(@"c:\build.txt")
+                        : ConfigurationManager.AppSettings["browserStack.build"];
+                    name = File.Exists(@"c:\name.txt")
+                        ? File.ReadAllText(@"c:\name.txt")
+                        : ConfigurationManager.AppSettings["browserStack.name"];
+                }
+                catch
+                {
+                    //ignore, send empty values.
+                }
+
+                browserCap = BrowserSetup.BrowserStack(
+                    browserType: BrowserStackSupportedBrowserType.Chrome,
+                    osType: BrowserStackSupportedOsType.Windows,
+                    supportedResolution: BrowserStackSupportedResolution._1600x1200,
+                    project: project,
+                    build: build,
+                    name: name);
+
+                Engine.WebDriver = new EventFiringWebDriver(new RemoteWebDriver(new Uri(browserstackHost), browserCap));
+            }
+
+                #endregion
+
             else
             {
                 Debug.WriteLine("Error in identifying Local vs Remote");
@@ -429,14 +588,13 @@ namespace Cactus.Drivers
 
             //startEngine.FixtureSetup();  // Start Up WebDriver.
 
-
             return startEngine;
         }
 
         /// <summary>
         /// Clear the IE Cache before loading the browser.  There are different Codes that can perform different clears. 
         /// </summary>
-        static void clearIECache()
+        private static void clearIECache()
         {
             var startInfo = new ProcessStartInfo
             {
@@ -445,7 +603,8 @@ namespace Cactus.Drivers
                 FileName = "RunDll32.exe",
                 WindowStyle = ProcessWindowStyle.Hidden,
                 // Arguments = "InetCpl.cpl,ClearMyTracksByProcess 8"  //Delete Temporary Internet Files:
-                Arguments = "InetCpl.cpl,ClearMyTracksByProcess 4351"  //Delete All + files and settings stored by Add-ons:
+                Arguments = "InetCpl.cpl,ClearMyTracksByProcess 4351"
+                //Delete All + files and settings stored by Add-ons:
             };
 
             Process.Start(startInfo).WaitForExit(30000);
@@ -549,7 +708,7 @@ namespace Cactus.Drivers
                 {
                     try
                     {
-                        returnedXmlClass = (T)new XmlSerializer(typeof(T)).Deserialize(reader);
+                        returnedXmlClass = (T) new XmlSerializer(typeof (T)).Deserialize(reader);
                     }
                     catch (InvalidOperationException)
                     {
@@ -617,12 +776,42 @@ namespace Cactus.Drivers
             using (PerformanceTimer.Start(
                 timer => PerformanceTimer.LogTimeResult("GoToUrl", timer, WebDriver.Url)))
             {
-                //   if (Engine.GetCurrentUrl.Contains("agent/login"))
-                //      return Engine.GetCurrentUrl;
-                Engine.WebDriver.Navigate().GoToUrl(uri);
-                Support.WaitForPageReadyState(TimeSpan.FromSeconds(16));
+                try
+                {
+                    WebDriver.Navigate().GoToUrl(uri);
+                    Support.WaitForPageReadyState(TimeSpan.FromSeconds(16));
+                    return WebDriver.Url;
+                }
+                catch (NoSuchWindowException noWindowException)
+                {
+                    var windowHandles = Engine.WebDriver.WindowHandles;
+                    if (windowHandles.Count > 0)
+                    {
+                        //recover
+                        Engine.WebDriver.SwitchTo().Window(windowHandles.First());
+                        Log.LogInfo("GoToUrl autoRecovery #1 to first Window");
+                        Support.WaitForPageReadyState(TimeSpan.FromSeconds(16));
+                        return WebDriver.Url;
+                    }
+
+                    Thread.Sleep(10000); // sleep 
+                    windowHandles = Engine.WebDriver.WindowHandles;
+                    if (windowHandles.Count > 0)
+                    {
+                        //recover
+                        Engine.WebDriver.SwitchTo().Window(windowHandles.First());
+                        Log.LogInfo("GoToUrl autoRecovery #2 to first Window");
+                        Support.WaitForPageReadyState(TimeSpan.FromSeconds(16));
+                        return WebDriver.Url;
+                    }
+
+                    // declare that Webdriver is not open.
+                    Log.LogError("NoSuchWindowException Details: " + Environment.NewLine +
+                                 "No window Handles at all in the WebDriver engine.");
+                    Log.LogException(noWindowException);
+                    throw;
+                }
             }
-            return Engine.WebDriver.Url;
         }
 
         /// <summary>
@@ -636,6 +825,22 @@ namespace Cactus.Drivers
             body.SendKeys(Keys.Control + 't');
             var uri = new Uri(baseUrl + endpoint);
             GoToUrl(uri);
+        }
+
+        /// <summary>
+        /// Close all Browser Tabs but the Primary Tab
+        /// </summary>
+        public static void CloseAllOtherTabs()
+        {
+            var originalHandle = WebDriver.CurrentWindowHandle;
+
+            foreach (var handle in WebDriver.WindowHandles.Where(handle => !handle.Equals(originalHandle)))
+            {
+                WebDriver.SwitchTo().Window(handle);
+                WebDriver.Close();
+            }
+
+            WebDriver.SwitchTo().Window(originalHandle);
         }
 
         /// <summary>
@@ -699,7 +904,7 @@ namespace Cactus.Drivers
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        static void exceptionWatcher(object sender, FirstChanceExceptionEventArgs e)
+        private static void exceptionWatcher(object sender, FirstChanceExceptionEventArgs e)
         {
             if (
                 e.Exception.Message.Contains(
@@ -712,7 +917,7 @@ namespace Cactus.Drivers
             }
             else
             {
-                if (e.Exception.GetType() == typeof(StaleElementReferenceException))
+                if (e.Exception.GetType() == typeof (StaleElementReferenceException))
                 {
                     //ignore
                 }
@@ -775,7 +980,7 @@ namespace Cactus.Drivers
         /// </summary>
         /// <param name="e"></param>
         /// <returns></returns>
-        static bool isDuplicateError(FirstChanceExceptionEventArgs e)
+        private static bool isDuplicateError(FirstChanceExceptionEventArgs e)
         {
             if (_lastMessage != e.Exception.Message)
             {
@@ -785,15 +990,42 @@ namespace Cactus.Drivers
             return true;
         }
 
-        public static void AlertGoAway()
+        /// <summary>
+        /// This is used to click the OK button on javascript Alert dialogs.
+        /// </summary>
+        public static void AlertAccept()
         {
             try
             {
                 // Check the presence of alert
-                var alert = Engine.WebDriver.SwitchTo().Alert();
+                var alert = WebDriver.SwitchTo().Alert();
                 Support.ScreenShot();
                 // if present consume the alert
                 alert.Accept();
+            }
+            catch (NoAlertPresentException)
+            {
+                // Alert not present
+                //Debug.WriteLine(ex.Message);
+            }
+            catch (Exception)
+            {
+                // ignore
+            }
+        }
+
+        /// <summary>
+        /// This is used to click the Cancel button on javascript Alert dialogs.
+        /// </summary>
+        public static void AlertDismiss()
+        {
+            try
+            {
+                // Check the presence of alert
+                var alert = WebDriver.SwitchTo().Alert();
+                Support.ScreenShot();
+                // if present consume the alert
+                alert.Dismiss();
             }
             catch (NoAlertPresentException)
             {
@@ -856,20 +1088,21 @@ namespace Cactus.Drivers
             return !presentFlag;
         }
 
-        static void startAsBrowser(SupportedBrowserType browserType)
+        private static void startAsBrowser(SupportedBrowserType browserType)
         {
             lock (_lock)
             {
                 Log.LogInfo("Initializing {0} web driver browser instance", browserType);
 
+                var engine = SetupEngine(
+                    browserType,
+                    Url: ConfigurationManager.AppSettings["InitialPageUrl"],
+                    driverType: ConfigurationManager.AppSettings["LocalOrRemoteOrBrowserStack"]);
 
-                var engine = SetupEngine(browserType, ConfigurationManager.AppSettings["InitialPageUrl"], "local");
-
-                if (engine == null || Engine.WebDriver == null)
+                if (engine == null || WebDriver == null)
                 {
                     Log.LogInfo("Engine has not started.");
                     throw new Exception("Error setting engine window size.  Engine was not detected.");
-
                 }
 
                 SetWindowSize();
@@ -1061,7 +1294,7 @@ namespace Cactus.Drivers
             {
                 var javaScriptExecutor = Engine.WebDriver as IJavaScriptExecutor;
                 var ajaxIsComplete = javaScriptExecutor != null
-                                     && (bool)javaScriptExecutor.ExecuteScript("return jQuery.active == 0");
+                                     && (bool) javaScriptExecutor.ExecuteScript("return jQuery.active == 0");
                 if (ajaxIsComplete)
                     break;
                 Thread.Sleep(200);
@@ -1081,7 +1314,7 @@ namespace Cactus.Drivers
         {
             try
             {
-                return (string)((IJavaScriptExecutor)Engine.WebDriver).ExecuteScript(javaScript);
+                return (string) ((IJavaScriptExecutor) Engine.WebDriver).ExecuteScript(javaScript);
             }
             catch (UnhandledAlertException unhandledAlertException)
             {
@@ -1105,7 +1338,7 @@ namespace Cactus.Drivers
         {
             try
             {
-                return (T)((IJavaScriptExecutor)Engine.WebDriver).ExecuteScript(script);
+                return (T) ((IJavaScriptExecutor) Engine.WebDriver).ExecuteScript(script);
             }
             catch (UnhandledAlertException unhandledAlertException)
             {
@@ -1130,7 +1363,7 @@ namespace Cactus.Drivers
         {
             try
             {
-                return (T)((IJavaScriptExecutor)driver).ExecuteScript(script);
+                return (T) ((IJavaScriptExecutor) driver).ExecuteScript(script);
             }
             catch (UnhandledAlertException unhandledAlertException)
             {
@@ -1155,7 +1388,7 @@ namespace Cactus.Drivers
         {
             try
             {
-                return (T)((IJavaScriptExecutor)Engine.WebDriver).ExecuteScript(script, args);
+                return (T) ((IJavaScriptExecutor) Engine.WebDriver).ExecuteScript(script, args);
             }
             catch (UnhandledAlertException unhandledAlertException)
             {
@@ -1181,7 +1414,7 @@ namespace Cactus.Drivers
         {
             try
             {
-                return (T)((IJavaScriptExecutor)driver).ExecuteScript(script, args);
+                return (T) ((IJavaScriptExecutor) driver).ExecuteScript(script, args);
             }
             catch (UnhandledAlertException unhandledAlertException)
             {
@@ -1241,7 +1474,7 @@ namespace Cactus.Drivers
             }
             try
             {
-                new WebDriverWait(Engine.WebDriver, (TimeSpan)waitTimeSpan)
+                new WebDriverWait(Engine.WebDriver, (TimeSpan) waitTimeSpan)
                     .Until(ExpectedConditions.ElementExists(by));
 
                 return new Control(Engine.WebDriver.FindElement(by));
@@ -1306,7 +1539,8 @@ namespace Cactus.Drivers
 
         #region  Find Elements
 
-        public static IWebElement FindChildElement(IWebElement parentElement, OpenQA.Selenium.By by, bool safeMode = true)
+        public static IWebElement FindChildElement(IWebElement parentElement, OpenQA.Selenium.By by,
+            bool safeMode = true)
         {
             try
             {
@@ -1523,7 +1757,7 @@ namespace Cactus.Drivers
 
         public static IWebElement FindElementByJs(IWebDriver driver, string jsCommand)
         {
-            return (IWebElement)((IJavaScriptExecutor)driver).ExecuteScript(jsCommand);
+            return (IWebElement) ((IJavaScriptExecutor) driver).ExecuteScript(jsCommand);
         }
 
         /// <summary>
@@ -1615,7 +1849,7 @@ namespace Cactus.Drivers
             }
             try
             {
-                new WebDriverWait(Engine.WebDriver, (TimeSpan)waitTimeSpan)
+                new WebDriverWait(Engine.WebDriver, (TimeSpan) waitTimeSpan)
                     .Until(ExpectedConditions.ElementExists(by));
 
                 return WebDriver.FindElement(by);
@@ -2106,14 +2340,16 @@ namespace Cactus.Drivers
         {
             get
             {
-                if (!Engine.WebDriver.PageSource.Contains("500 Error") && !Engine.WebDriver.PageSource.Contains("Server Error in"))
+                if (!Engine.WebDriver.PageSource.Contains("500 Error") &&
+                    !Engine.WebDriver.PageSource.Contains("Server Error in"))
                 {
                     return false;
                 }
                 Engine.WebDriver.Navigate().Refresh();
                 Thread.Sleep(2000);
                 // try 1 more time to keep tests running properly on low CPU/ memory
-                if (!Engine.WebDriver.PageSource.Contains("500 Error") && !Engine.WebDriver.PageSource.Contains("Server Error in"))
+                if (!Engine.WebDriver.PageSource.Contains("500 Error") &&
+                    !Engine.WebDriver.PageSource.Contains("Server Error in"))
                 {
                     return false;
                 }
@@ -2161,7 +2397,7 @@ namespace Cactus.Drivers
         {
             if (frameIndex == null)
                 frameIndex = 0;
-            return Engine.WebDriver.SwitchTo().Frame((int)frameIndex);
+            return Engine.WebDriver.SwitchTo().Frame((int) frameIndex);
         }
 
         /// <summary>
@@ -2401,7 +2637,7 @@ namespace Cactus.Drivers
         /// </summary>
         /// <param name="direction"></param>
         /// <returns></returns>
-        static int scroll(ScrollDirection direction)
+        private static int scroll(ScrollDirection direction)
         {
             var actions = new Actions(WebDriver);
 
@@ -2483,7 +2719,7 @@ namespace Cactus.Drivers
     {
         public static T ToEnum<T>(this string enumString)
         {
-            return (T)Enum.Parse(typeof(T), enumString);
+            return (T) Enum.Parse(typeof (T), enumString);
         }
     }
 
@@ -2492,7 +2728,59 @@ namespace Cactus.Drivers
         Firefox,
         Ie,
         Chrome,
-        PhantomJs
+        PhantomJs,
+        Edge
+    }
+
+    //https://www.browserstack.com/automate/capabilities
+    /*
+    Parameter override rules When specifying both default and BrowserStack-specific capabilities, the following rules define any overrides that take place:
+            If browser and browserName are both defined, browser has precedence (except if browserName is either android, iphone, or ipad, in which cases browser is ignored and the default browser on those devices is selected).
+            If browser_version and version are both defined, browser_version has precedence.
+            If os and platform are both defined, os has precedence.
+            Platform and os_version cannot be defined together, if os has not been defined.
+            os_version can only be defined when os has been defined.
+            The value ANY if given to any parameter is same as the parameter preference not specified.
+            default browser is chrome when no browser is passed by the user or the selenium API (implicitly).
+    */
+
+    /// <summary>
+    /// firefox, chrome, internet explorer, safari, opera, iPad, iPhone, android 
+    /// Default: chrome
+    /// </summary>
+    public enum BrowserStackSupportedBrowserType
+    {
+        Firefox,
+        Ie,
+        Chrome,
+        Safari,
+        Opera,
+        Edge
+    }
+
+    /// <summary>
+    /// No Default
+    /// </summary>
+    /// 
+    public enum BrowserStackSupportedOsType
+    {
+        Windows,
+        OS_X
+    }
+
+    /// <summary>
+    /// Windows (XP,7): 800x600, 1024x768, 1280x800, 1280x1024, 1366x768, 1440x900, 1680x1050, 1600x1200, 1920x1200, 1920x1080, 2048x1536 
+    /// Windows (8,8.1): 1024x768, 1280x800, 1280x1024, 1366x768, 1440x900, 1680x1050, 1600x1200, 1920x1200, 1920x1080, 2048x1536 
+    /// OS X: 1024x768, 1280x960, 1280x1024, 1600x1200, 1920x1080
+    /// Default: 1024x768
+    /// </summary>
+    public enum BrowserStackSupportedResolution
+    {
+        _1024x768,
+        _1280x960,
+        _1280x1024,
+        _1600x1200,
+        _1920x1080
     }
 
     public interface IBrowserDriver : IDisposable
@@ -2635,6 +2923,185 @@ namespace Cactus.Drivers
             }
         }
 
+
+        /// <summary>
+        /// This will set the capabilities needed to run against BrowserStack
+        /// driver = new RemoteWebDriver(new Uri("http://hub.browserstack.com/wd/hub/"), capability);
+        /// 
+        /// </summary>
+        /// <param name="browserType"></param>
+        /// <param name="osType"></param>
+        /// <param name="supportedResolution"></param>
+        /// <param name="project">Note: Allowed characters include uppercase and lowercase letters, digits, spaces, colons, periods, and underscores. Other characters, like hyphens or slashes are not allowed.</param>
+        /// <param name="build">Note: Allowed characters include uppercase and lowercase letters, digits, spaces, colons, periods, and underscores. Other characters, like hyphens or slashes are not allowed.</param>
+        /// <param name="name">Note: Allowed characters include uppercase and lowercase letters, digits, spaces, colons, periods, and underscores. Other characters, like hyphens or slashes are not allowed.</param>
+        /// <param name="osVersion"></param>
+        /// <param name="browserVersion"></param>
+        /// <param name="device"></param>
+        /// <param name="deviceOrientation"></param>
+        /// <returns></returns>
+        public static DesiredCapabilities BrowserStack(BrowserStackSupportedBrowserType browserType,
+            BrowserStackSupportedOsType osType,
+            BrowserStackSupportedResolution supportedResolution,
+            string project = "",
+            string build = "",
+            string name = "",
+            string osVersion = "",
+            string browserVersion = "",
+            string device = "",
+            string deviceOrientation = "")
+        {
+
+            var user = ConfigurationManager.AppSettings["browserstack.user"];
+            var key = ConfigurationManager.AppSettings["browserstack.key"];
+
+            var paramPlatform = string.Empty;
+            var paramBrowserName = string.Empty;
+            var paramVersion = string.Empty;
+
+            //BrowserStack-specific capabilities
+            var paramOs = osType.ToString().Replace("_", "");
+            var paramOsVersion = osVersion;
+            var paramBrowserVersion = browserVersion;
+
+            //For mobile support, specify the following capabilities:
+            var paramDevice = device; //https://www.browserstack.com/list-of-browsers-and-platforms?product=automate
+
+            //portrait, landscape  Default: portrait
+            var paramDeviceOrientation = deviceOrientation;
+
+            //Other browserstack capabilities:
+
+            // Note: Allowed characters include uppercase and lowercase letters, digits, spaces, colons, periods, and underscores. Other characters, like hyphens or slashes are not allowed.
+            //Allows the user to specify a name for a logical group of builds.
+            //var project = string.Empty;
+            //Allows the user to specify a name for a logical group of tests.
+            //var build = string.Empty;
+            //Allows the user to specify an identifier for the test run.
+            //var name = string.Empty;
+
+            //Required if you are testing against internal/local servers.  
+            // https://www.browserstack.com/local-testing
+            // https://www.browserstack.com/downloads/Local-Testing-Internals.pdf
+            var browserstack_local = false; //browserstack.local 
+            var browserstack_localIdentifier = string.Empty;
+
+            //Required if you want to generate screenshots at various steps in your test.
+            var browserstack_debug = true; //browserstack.debug
+            //Set the resolution of VM before beginning of your test.
+            var resolution = supportedResolution.ToString().Replace("_", "");
+
+            //Use this capability to set the Selenium WebDriver version in test scripts.
+            var browserstack_selenium_version = string.Empty; //Default: 2.43.1
+
+            //Use this capability to disable flash on Internet Explorer.
+            var browserstack_ie_noFlash = true;
+
+            //Use this capability to specify the IE webdriver version.
+            //Default: Browserstack automatically selects the IE webdriver version based on the browser version provided.
+            var browserstack_ie_driver = string.Empty;
+
+            //Use this capability to enable the popup blocker in IE.
+            var browserstack_ie_enablePopups = false;
+
+            //To avoid invalid certificate errors while testing on BrowserStack Automate, set the acceptSslCerts capability in your test to true.
+            var acceptSslCerts = true;
+
+            /*
+             Parameter override rules When specifying both default and BrowserStack-specific capabilities, the following rules define any overrides that take place:
+                If browser and browserName are both defined, browser has precedence (except if browserName is either android, iphone, or ipad, in which cases browser is ignored and the default browser on those devices is selected).
+                If browser_version and version are both defined, browser_version has precedence.
+                If os and platform are both defined, os has precedence.
+                Platform and os_version cannot be defined together, if os has not been defined.
+                os_version can only be defined when os has been defined.
+                The value ANY if given to any parameter is same as the parameter preference not specified.
+                default browser is chrome when no browser is passed by the user or the selenium API (implicitly).
+             */
+            if (paramPlatform != "MAC")
+            {
+                DesiredCapabilities caps;
+                switch (browserType)
+                {
+                    case BrowserStackSupportedBrowserType.Chrome:
+                        caps = DesiredCapabilities.Chrome();
+                        caps.SetCapability("browser", "Chrome");
+                        break;
+                    case BrowserStackSupportedBrowserType.Firefox:
+                        caps = DesiredCapabilities.Firefox();
+                        caps.SetCapability("browser", "Firefox");
+                        break;
+                    case BrowserStackSupportedBrowserType.Ie:
+                        caps = DesiredCapabilities.InternetExplorer();
+                        caps.SetCapability("browser", "IE");
+
+                        caps.SetCapability("browserstack.ie.noFlash", browserstack_ie_noFlash.ToString().ToLower());
+                        caps.SetCapability("browserstack.ie.driver ", browserstack_ie_driver);
+                        caps.SetCapability("browserstack.ie.enablePopups",
+                            browserstack_ie_enablePopups.ToString().ToLower());
+                        break;
+                    case BrowserStackSupportedBrowserType.Safari:
+                        caps = DesiredCapabilities.Safari();
+                        caps.SetCapability("browser", "Safari");
+                        break;
+                    case BrowserStackSupportedBrowserType.Opera:
+                        caps = DesiredCapabilities.Opera();
+                        caps.SetCapability("browser", "Opera");
+                        break;
+                    default:
+                        caps = DesiredCapabilities.Chrome();
+                        caps.SetCapability("browser", "Chrome");
+                        break;
+                }
+
+                caps.SetCapability("project", project);
+                caps.SetCapability("build", build);
+                caps.SetCapability("name", name);
+
+                caps.SetCapability("browserstack.user", user);
+                caps.SetCapability("browserstack.key", key);
+
+                //If browser_version and version are both defined, browser_version has precedence.
+                caps.SetCapability("browser_version", paramBrowserVersion); //"10.0"
+                caps.SetCapability("version", paramVersion);
+
+                if (paramOs.Contains("Windows"))
+                {
+                    caps.SetCapability("os", paramOs); //"Windows"
+                    caps.SetCapability("os_version", paramOsVersion); //"8"
+                }
+                else
+                {
+                    caps.SetCapability("os", paramOs); //"Windows"
+                    caps.SetCapability("os_version", paramOsVersion); //"8"
+                    /*
+                        caps.setCapability("browser", "Safari");
+                        caps.setCapability("browser_version", "7.0");
+                        caps.setCapability("os", "OS X");
+                        caps.setCapability("os_version", "Mavericks");
+                     */
+
+                }
+                caps.SetCapability("resolution", resolution);
+                caps.SetCapability("browserstack.selenium_version", browserstack_selenium_version);
+                caps.SetCapability("browserstack.debug", browserstack_debug.ToString().ToLower());
+                caps.SetCapability("acceptSslCerts", acceptSslCerts.ToString().ToLower());
+                caps.SetCapability("browserstack.local", browserstack_local.ToString().ToLower());
+                caps.SetCapability("browserstack.localIdentifier", browserstack_localIdentifier);
+
+                return caps;
+            }
+            else
+            {
+                var caps = new DesiredCapabilities();
+                caps.SetCapability("browserName", paramBrowserName); // iPhone
+                caps.SetCapability("platform", paramPlatform); //MAC, WIN8, XP, WINDOWS, ANY, ANDROID.
+                caps.SetCapability("device", paramDevice); //"iPhone 5S"
+                caps.SetCapability("deviceOrientation", paramDeviceOrientation); //Default: portrait
+                return caps;
+            }
+        }
+
+
         public static void ExecuteCommand(string command)
         {
             try
@@ -2653,6 +3120,7 @@ namespace Cactus.Drivers
             {
             }
         }
+
     }
 
     public class BrowserConfig

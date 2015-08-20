@@ -8,6 +8,7 @@ using System.Threading;
 using NUnit.Framework;
 using Cactus.Infrastructure;
 using OpenQA.Selenium;
+using OpenQA.Selenium.Support.UI;
 using Should;
 
 namespace Cactus.Drivers
@@ -532,6 +533,31 @@ namespace Cactus.Drivers
         }
 
         /// <summary>
+        /// Asserts the Location of the element is located withing normal tolerances.  
+        /// </summary>
+        /// <param name="controlAssert"></param>
+        /// <param name="topX"></param>
+        /// <param name="topY"></param>
+        /// <param name="bottomX"></param>
+        /// <param name="bottomY"></param>
+        /// <returns></returns>
+        public static bool ShouldBeLocatedBetween(this ControlAsserts controlAssert, int topX, int topY, int bottomX, int bottomY)
+        {
+            controlAssert.Control.WaitForElementVisible();
+
+            Assert.IsTrue(controlAssert.Control.IsElementInCorrectLocation(topX,topY,bottomX,bottomY), "FAIL: " +
+                string.Format("{1} was expecting a different Location: {0} ", Environment.NewLine,
+                    controlAssert.Control.MyBy));
+
+            new UxTestingLogger().LogInfo("PASS: " +
+                string.Format("{1} was expecting Location: {0} {2} {0} and was :{2}", Environment.NewLine,
+                    controlAssert.Control.MyBy, controlAssert.Control.Location));
+            new TestLineStatusWithEvent().Status(TestStatus.Passed);
+            return true;
+        }
+
+
+        /// <summary>
         /// Asserts the html element attribute "SRC" of this element is same as expected
         /// StringAssert.AreEqualIgnoringCase expectedSrc, controlAssert.Control.Src
         /// </summary>
@@ -577,9 +603,11 @@ namespace Cactus.Drivers
                                     controlAssert.Control.MyBy, expectedText, controlAssert.Control.Text));
                 }
             }
+
             new UxTestingLogger().LogInfo("PASS: " + 
                 string.Format("{1} was expecting text: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedText, controlAssert.Control.Text));
+
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
         }
@@ -645,6 +673,36 @@ namespace Cactus.Drivers
             return ShouldContainClass(controlAssert, controlClass, errorMessage);
         }
         
+        /// <summary>
+        /// Given a Select Control, this should find if an option is available.
+        /// </summary>
+        /// <param name="controlAssert"></param>
+        /// <param name="expectedOptionText"></param>
+        /// <param name="errorMessage"></param>
+        /// <returns></returns>
+        public static bool HasOption(this ControlAsserts controlAssert, string expectedOptionText, string errorMessage = "")
+        {
+            controlAssert.Control.WaitForElementPresent();
+            var pass = false;
+            var select = new SelectElement(controlAssert.Control.Element);
+            IList<IWebElement> options = select.Options; // this select.Options pulls all the options and holds them while the foreach below iterates through the list and outputs to the console
+            foreach (IWebElement option in options)
+            {
+                if (option.Text.Equals(expectedOptionText))
+                    pass = true;
+            }
+
+            Assert.IsTrue(pass, "FAIL: " +
+                string.Format("{1} was expecting option : {0} {2} {0} and was :{3}{0}{4}", Environment.NewLine,
+                    controlAssert.Control.MyBy, expectedOptionText, options.ToString(), errorMessage));
+
+            new UxTestingLogger().LogInfo("PASS: " + string.Format("{1} was expecting class : {0} {2} {0} and was :{3}", Environment.NewLine,
+                    controlAssert.Control.MyBy, expectedOptionText, options.ToString()));
+
+            new TestLineStatusWithEvent().Status(TestStatus.Passed);
+            return true;
+        }
+
         /// <summary>
         /// Asserts that the control is a Button.
         /// Assert.IsTrue controlAssert.Control.IsButton
@@ -1280,10 +1338,35 @@ namespace Cactus.Drivers
         }
 
         /// <summary>
+        /// Asserts that this control has an attribute with the specified name and value
+        /// Assert.IsFalse controlAssert.Control.IsDisabled
+        /// </summary>
+        /// <param name="controlAssert"></param>
+        /// <param name="attributeName"></param>
+        /// <param name="expectedValue"></param>
+        /// <returns>true/false. Can be used in If statements</returns>
+        public static bool HasAttributeValue(this ControlAsserts controlAssert, string attributeName, string expectedValue)
+        {
+            var actualValue = controlAssert.Control.GetAttributeValue(attributeName);
+
+            StringAssert.AreEqualIgnoringCase(actualValue, expectedValue, "FAIL: " +
+                string.Format("{1} does not have attribute {0}{2}{0} or the attribute value did not equal: {0}{3}{0} and was: {4}", Environment.NewLine,
+                    controlAssert.Control.MyBy, attributeName, expectedValue, actualValue));
+
+            new UxTestingLogger().LogInfo("PASS: " +
+                string.Format("{1} has attribute {0}{2}{0} and the expected value: {0}{3}{0} matched the actual: {4}", Environment.NewLine,
+                    controlAssert.Control.MyBy, attributeName, expectedValue, actualValue));
+            new TestLineStatusWithEvent().Status(TestStatus.Passed);
+            return true;
+        }
+
+        /// <summary>
         /// On deconstruction, if the test case failed during one of these methods in this class, 
         /// it will alert the Event Watchers of a failure.
         /// </summary>
+#pragma warning disable 465
         static void Finalize()
+#pragma warning restore 465
         {
             if (TestContext.CurrentContext.Result.Status == TestStatus.Failed)
             {
