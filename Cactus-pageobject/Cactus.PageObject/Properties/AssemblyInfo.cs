@@ -4,11 +4,11 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("Cactus")]
+[assembly: AssemblyTitle("Cactus.PageObject")]
 [assembly: AssemblyDescription("PageObject Style Framework On top of Selenium WebDriver")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Dovetail Software")]
-[assembly: AssemblyProduct("Cactus")]
+[assembly: AssemblyProduct("Cactus.PageObject")]
 [assembly: AssemblyCopyright("Copyright © 2015")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]

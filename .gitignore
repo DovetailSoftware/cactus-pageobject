@@ -1,6 +1,6 @@
 *.suo
 *.user
 *.nupkg
-Cactus-pageobject/Cactus/bin/
-Cactus-pageobject/Cactus/obj/
+Cactus-pageobject/Cactus.PageObject/bin/
+Cactus-pageobject/Cactus.PageObject/obj/
 Cactus-pageobject/packages/
