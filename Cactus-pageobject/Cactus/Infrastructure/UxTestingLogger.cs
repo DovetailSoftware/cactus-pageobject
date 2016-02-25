@@ -1,68 +1,96 @@
 ﻿using System;
+using System.Threading.Tasks;
+using Cactus.Drivers;
 
 namespace Cactus.Infrastructure
 {
-    public class UxTestingLogger :  IDisposable
+    public class UxTestingLogger : ILogger, IDisposable
     {
+        const string DebugText = "DEBUG";
+        const string InfoText = "INFO";
+        const string WarningText = "WARN";
+        const string ErrorText = "ERROR";
+        const string FatalText = "FATAL";
 
-        const string Debug = "DEBUG";
-        const string Info = "INFO";
-        const string Warning = "WARN";
-        const string Error = "ERROR";
-        const string Fatal = "FATAL";
+        public bool IsInfoEnabled { get { return true; } }
+        public bool IsWarnEnabled { get { return true; } }
+        public bool IsDebugEnabled { get { return true; } }
+        public bool IsErrorEnabled { get { return true; } }
+        public bool IsFatalEnabled { get { return true; } }
 
-        public void LogDebug(string message)
+        public Task Info(object message)
         {
-            log(Debug, message);
+            return Task.Run(() => log(InfoText, message));
         }
 
-        public void LogDebug(string message, params object[] parameters)
+        public Task Info(string message)
         {
-            log(Debug, message, parameters);
+            return Task.Run(() => log(InfoText, message));
         }
 
-        public void LogInfo(string message, params object[] parameters)
+        public Task Info(string message, params object[] parameters)
         {
-            log(Info, message, parameters);
+            return Task.Run(() => log(InfoText, message, parameters));
         }
 
-        public void LogInfo(string message)
+        public Task Warn(string message)
         {
-            log(Info, message);
+            return Task.Run(() => log(WarningText, message));
         }
 
-        public void LogWarn(string message)
+        public Task Warn(string message, params object[] parameters)
         {
-            log(Warning, message);
-        }
-        public void LogWarn(string message, params object[] parameters)
-        {
-            log(Warning, message, parameters);
+            return Task.Run(() => log(WarningText, message, parameters));
         }
 
-        public void LogError(string message)
+        public Task Debug(object message)
         {
-            log(Error, message);
+            return Task.Run(() => log(DebugText, message));
         }
 
-        public void LogError(string message, params object[] parameters)
+        public Task Debug(string message)
         {
-            log(Error, message, parameters);
+            return Task.Run(() => log(DebugText, message));
         }
 
-        public void LogFatal(string message)
+        public Task Debug(string message, params object[] parameters)
         {
-            log(Fatal, message);
+            return Task.Run(() => log(DebugText, message, parameters));
         }
 
-        public void LogFatal(string message, params object[] parameters)
+        public Task Debug(string message, Exception exception)
         {
-            log(Fatal, message, parameters);
+            return Task.Run(() => log(DebugText, "{0}\n\tException Details: {1}", message, exception == null ? "" : "\n\t\t" + exception.ToString().Split('\n').Join("\n\t\t")));
         }
 
-        public void LogError(string message, Exception exception)
+        public Task Error(string message)
         {
-            log(Error, "{0}\n\tException Details: {1}", message, exception == null ? "" : "\n\t\t" + String.Join("\n\t\t", exception.ToString().Split('\n')));
+            return Task.Run(() => log(ErrorText, message));
+        }
+
+        public Task Error(string message, params object[] parameters)
+        {
+            return Task.Run(() => log(ErrorText, message, parameters));
+        }
+
+        public Task Error(string message, Exception exception)
+        {
+            return Task.Run(() => log(ErrorText, "{0}\n\tException Details: {1}", message, exception == null ? "" : "\n\t\t" + exception.ToString().Split('\n').Join("\n\t\t")));
+        }
+
+        public Task Fatal(string message)
+        {
+            return Task.Run(() => log(FatalText, message));
+        }
+
+        public Task Fatal(string message, params object[] parameters)
+        {
+            return Task.Run(() => log(FatalText, message, parameters));
+        }
+
+        public Task Fatal(string message, Exception exception)
+        {
+            return Task.Run(() => log(FatalText, "{0}\n\tException Details: {1}", message, exception == null ? "" : "\n\t\t" + exception.ToString().Split('\n').Join("\n\t\t")));
         }
 
         public IDisposable Push(string context)
@@ -70,38 +98,58 @@ namespace Cactus.Infrastructure
             return this;
         }
 
-        public void LogException(Exception exception)
+        public Task Exception(Exception exception)
         {
-            if (exception == null)
+            return Task.Run(() =>
             {
-                LogError("Weird: we were asked to log a null exception.");
-                return;
-            }
-            LogError("EXCEPTION", exception);
+                if (exception == null)
+                {
+                    Error("Weird: we were asked to log a null exception.");
+                    return;
+                }
+
+                Error("EXCEPTION " +
+                      string.Format("Message --- {0}{1}{0}Source --- {2}{0}StackTrace --- {0}{3}{0}",
+                          Environment.NewLine,
+                          exception.Message,
+                          exception.Source,
+                          exception.StackTrace));
+            });
         }
 
         public void Dispose() { }
 
+        static void log(string level, object message)
+        {
+            log(level, message.ToString());
+        }
+
         static void log(string level, string message)
         {
-            if (message.StartsWith("WaitFor"))
+            if (message.StartsWith("Fiddler") && level == InfoText)
             {
-                Console.WriteLine(string.Format("{0} {1}", "#", message));
+                Console.WriteLine($"{"#"} {message}");
+            }
+            else if (message.StartsWith("WaitFor"))
+            {
+                Console.WriteLine($"{"#"} {message}");
             }
             else if (message.StartsWith("PASS") || message.StartsWith("FAIL") || message.StartsWith("-"))
             {
-                Console.WriteLine(string.Format("{0} {1}", "~", message));
+                Console.WriteLine($"{"~"} {message}");
             }
             else
             {
-                Console.WriteLine(string.Format("{0}: {1}", level, message));
+                Console.WriteLine($"{level}: {message}");
             }
 
         }
 
         static void log(string level, string message, params object[] parameters)
         {
-            log(level, string.Format(message,parameters) );
+            log(level, string.Format(message, parameters));
         }
+
+
     }
 }

@@ -10,6 +10,7 @@ using System.Linq.Expressions;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Xml;
 using System.Xml.XPath;
@@ -35,7 +36,7 @@ namespace Cactus.Drivers
 
         public static int DefaultTimeout = 2;
 
-        UxTestingLogger _logger;
+        ILogger _log;
 
         readonly WebDriverWait _wait = new WebDriverWait(Engine.WebDriver, TimeSpan.FromMinutes(DefaultTimeout));
         public OpenQA.Selenium.By MyBy;
@@ -60,7 +61,7 @@ namespace Cactus.Drivers
 
         private Control()
         {
-            _logger = new UxTestingLogger();
+            _log = new UxTestingLogger();
             Assert = new ControlAsserts(this);
         }
 
@@ -132,12 +133,12 @@ namespace Cactus.Drivers
             }
             catch (WebDriverException webDriverException)
             {
-                _logger.LogException(webDriverException);
+                _log.Exception(webDriverException);
                 throw;
             }
             catch (XPathException xPathException)
             {
-                _logger.LogException(xPathException);
+                _log.Exception(xPathException);
                 throw;
             }
             catch (Exception)
@@ -176,7 +177,7 @@ namespace Cactus.Drivers
             const string command = "return getElementXPath(arguments[0]);";
 
             var xpath = Engine.Execute<string>(Engine.WebDriver, script + " " + command, element);
-            //_logger.LogDebug(SelectorUsed + " has xpath = " + xpath);
+            //_log.Debug(SelectorUsed + " has xpath = " + xpath);
 
             if (xpath !=null)
                 MyBy = By.XPath(xpath); 
@@ -314,11 +315,11 @@ namespace Cactus.Drivers
             try
             {
                 _element.Clear();
-                _logger.LogDebug(MyBy + " cleared");
+                _log.Debug(MyBy + " cleared");
             }
             catch
             {
-                _logger.LogError(MyBy + " failed to clear");
+                _log.Error(MyBy + " failed to clear");
                 throw;
             }
         }
@@ -337,7 +338,7 @@ namespace Cactus.Drivers
             }
             catch
             {
-                _logger.LogError(MyBy + " failed to enter text");
+                _log.Error(MyBy + " failed to enter text");
                 throw;
             }
         }
@@ -349,13 +350,13 @@ namespace Cactus.Drivers
         {
             try
             {
-                _logger.LogDebug("Clicking || " + MyBy);
+                _log.Debug("Clicking || " + MyBy);
                 getElement(safeMode: true, refreshElement: true);
                 _element.Click();
             }
             catch (Exception ex)
             {
-                _logger.LogError(MyBy + " could not be clicked ", ex);
+                _log.Error(MyBy + " could not be clicked ", ex);
                 Support.ScreenShot();
                 throw;
             }
@@ -366,7 +367,7 @@ namespace Cactus.Drivers
         /// </summary>
         /// <param name="actionClick"></param>
         /// <param name="waitForDisappearance"></param>
-                /// <param name="highlight"></param>
+        /// <param name="highlight"></param>
         public void Click(bool actionClick = true, bool waitForDisappearance = false, bool highlight = true)
         {
             var action = new Actions(Engine.WebDriver);
@@ -384,9 +385,9 @@ namespace Cactus.Drivers
             try
             {
                 action.MoveToElement(_element).Build().Perform(); //pre Hover.  To help on VMs with viewports out of range.
-                Thread.Sleep(5); 
+                Thread.Sleep(5);
 
-                _logger.LogDebug("Clicking || " + MyBy);
+                _log.Debug("Clicking || " + MyBy);
                 if (actionClick)
                 {
                     
@@ -409,13 +410,17 @@ namespace Cactus.Drivers
                     _element.Click();
                     if (waitForDisappearance)
                     {
-                        try
+                        using (PerformanceTimer.Start(
+                            ts => PerformanceTimer.LogTimeResult("WaitUntilElementIsNotVisible " + MyBy, ts)))
                         {
-                            Support.WaitUntilElementIsNotVisible(MyBy, TimeSpan.FromSeconds(12));
-                        }
-                        catch (Exception)
-                        {
-                            //ignore
+                            try
+                            {
+                                Support.WaitUntilElementIsNotVisible(MyBy, TimeSpan.FromSeconds(12));
+                            }
+                            catch (Exception)
+                            {
+                                //ignore
+                            }
                         }
                     }
                 }
@@ -427,18 +432,18 @@ namespace Cactus.Drivers
             catch (StaleElementReferenceException)
             {
                 _element = Engine.WebDriver.FindElement(MyBy);
-                _logger.LogError(MyBy + " was stale, trying WebDriver click now ");
+                _log.Error(MyBy + " was stale, trying WebDriver click now ");
                 _element.Click();
             }
             catch (InvalidOperationException invalidOperationException)
             {
-                _logger.LogError(MyBy + " could not be clicked ", invalidOperationException);
+                _log.Error(MyBy + " could not be clicked ", invalidOperationException);
                 Support.ScreenShot();
                 throw;
             }
             catch (Exception ex)
             {
-                _logger.LogError(MyBy + " could not be clicked ", ex);
+                _log.Error(MyBy + " could not be clicked ", ex);
                 Support.ScreenShot();
                 throw;
             }
@@ -680,7 +685,7 @@ namespace Cactus.Drivers
                return;
             }
             // may need to throw error here later.
-            _logger.LogError(MyBy + " is not Displayed");
+            _log.Error(MyBy + " is not Displayed");
             return;
         }
 
@@ -969,7 +974,7 @@ namespace Cactus.Drivers
         public void DoubleClick()
         {
             getElement();
-            _logger.LogDebug("Double clicking: " + MyBy);
+            _log.Debug("Double clicking: " + MyBy);
             new Actions(Engine.WebDriver)
                 .MoveToElement(_element, 0, 0)
                 .DoubleClick(_element)
@@ -984,7 +989,7 @@ namespace Cactus.Drivers
         public void DoubleClickAt(int x = 1, int y = 1)
         {
             getElement();
-            _logger.LogDebug("Double clicking: " + MyBy);
+            _log.Debug("Double clicking: " + MyBy);
             new Actions(Engine.WebDriver)
                 .MoveToElement(_element, 0, 0)
                 .MoveByOffset(x, y)
@@ -1008,7 +1013,7 @@ namespace Cactus.Drivers
             if (droppableElement == null)
                 throw new Exception("No Element Found with " + MyBy);
 
-            _logger.LogDebug("Dragging and dropping: " + MyBy + " to " + droppableControl.MyBy);
+            _log.Debug("Dragging and dropping: " + MyBy + " to " + droppableControl.MyBy);
             new Actions(Engine.WebDriver)
                .ClickAndHold(_element)
                .MoveToElement(droppableElement)
@@ -1030,7 +1035,7 @@ namespace Cactus.Drivers
                 throw new Exception("No Element Found with " + MyBy);
 
 
-            _logger.LogDebug("Dragging and dropping: " + MyBy );
+            _log.Debug("Dragging and dropping: " + MyBy );
             new Actions(Engine.WebDriver)
                .ClickAndHold(_element)
                .MoveToElement(droppableElement)
@@ -1269,15 +1274,35 @@ namespace Cactus.Drivers
             {
                 _element = Engine.WebDriver.FindElement(MyBy);
             }
-            catch
+            catch (Exception ex)
             {
+                _log.Exception(ex);
                 return null;
             }
             if (_element == null && safeMode == false)
                 throw new NoSuchElementException();
-            if (_element == null)
-                return null;
-            return _element.GetAttribute(attributeName);
+            return _element?.GetAttribute(attributeName);
+        }
+
+        /// <summary>
+        /// Tests whether an element has an attribute
+        /// </summary>
+        /// <param name="attributeName"></param>
+        /// <param name="safeMode"></param>
+        /// <returns></returns>
+        public bool HasAttribute(string attributeName, bool safeMode = false)
+        {
+            try
+            {
+                _element = Engine.WebDriver.FindElement(MyBy);
+            }
+            catch
+            {
+                return false;
+            }
+            if (_element == null && safeMode == false)
+                throw new NoSuchElementException();
+            return _element?.GetAttribute(attributeName) != null;
         }
 
         /// <summary>
@@ -1443,12 +1468,14 @@ namespace Cactus.Drivers
                 }
                 catch (WebDriverTimeoutException)
                 {
-                    _logger.LogDebug("Timed out looking for " + selector);
+                    _log.Debug("Timed out looking for " + selector);
                 }
                 _element = Engine.WebDriver.FindElement(MyBy);
                 Support.WaitForPageReadyState();
                 if (highlight && _element != null)
-                    Highlight();
+                {
+                    Task.Run(() => Highlight(_element));
+                }
             }
             catch (NoSuchElementException)
             {
@@ -1460,17 +1487,17 @@ namespace Cactus.Drivers
             }
             catch (WebDriverException webDriverException)
             {
-                _logger.LogException(webDriverException);
+                _log.Exception(webDriverException);
                 throw;
             }
             catch (XPathException xPathException)
             {
-                _logger.LogException(xPathException);
+                _log.Exception(xPathException);
                 throw;
             }
             catch (Exception ex)
             {
-                _logger.LogException(ex);
+                _log.Exception(ex);
                 //throw;
             }
         }
@@ -1496,17 +1523,17 @@ namespace Cactus.Drivers
             }
             catch (WebDriverException webDriverException)
             {
-                _logger.LogException(webDriverException);
+                _log.Exception(webDriverException);
                 throw;
             }
             catch (XPathException xPathException)
             {
-                _logger.LogException(xPathException);
+                _log.Exception(xPathException);
                 throw;
             }
             catch (Exception ex)
             {
-                _logger.LogException(ex);
+                _log.Exception(ex);
                 throw;
             }
         }
@@ -1535,7 +1562,7 @@ namespace Cactus.Drivers
                 }
                 catch (WebDriverTimeoutException)
                 {
-                    _logger.LogDebug("Timed out looking for " + selector);
+                    _log.Debug("Timed out looking for " + selector);
                 }
                 _elements = Engine.WebDriver.FindElements(MyBy);
             }
@@ -1549,17 +1576,17 @@ namespace Cactus.Drivers
             }
             catch (WebDriverException webDriverException)
             {
-                _logger.LogException(webDriverException);
+                _log.Exception(webDriverException);
                 throw;
             }
             catch (XPathException xPathException)
             {
-                _logger.LogException(xPathException);
+                _log.Exception(xPathException);
                 throw;
             }
             catch (Exception ex)
             {
-                _logger.LogException(ex);
+                _log.Exception(ex);
                 //throw;
             }
         }
@@ -1588,12 +1615,12 @@ namespace Cactus.Drivers
                 throw new NoSuchElementException();
             try
             {
-                _logger.LogDebug("Attempting run of return arguments[0]." + eventMethod + "() could not be fired");
+                _log.Debug("Attempting run of return arguments[0]." + eventMethod + "() could not be fired");
                 Engine.Execute<object>(Engine.WebDriver, "return arguments[0]." + eventMethod + "()", _element);
             }
             catch(Exception ex)
             {
-                _logger.LogError("return arguments[0]." + eventMethod + "() could not be fired", ex);
+                _log.Error("return arguments[0]." + eventMethod + "() could not be fired", ex);
                 Support.ScreenShot();
                 throw;
             }
@@ -1700,7 +1727,7 @@ namespace Cactus.Drivers
                 {
                     return _element.Selected || _element.GetAttribute("checked") == "true" || _element.GetAttribute("checked") == "checked";
                 }
-                _logger.LogError(MyBy + " is not Displayed");
+                _log.Error(MyBy + " is not Displayed");
                 return _element.GetAttribute("checked") == "true";
             }
         }
@@ -1715,10 +1742,10 @@ namespace Cactus.Drivers
                 getElement();
                 if (_element.Displayed)
                 {
-                    _logger.LogDebug(MyBy + " is Disabled");
+                    _log.Debug(MyBy + " is Disabled");
                     return !_element.Enabled;
                 }
-                _logger.LogError(MyBy + " is not Disabled");
+                _log.Error(MyBy + " is not Disabled");
                 return !_element.Enabled;
             }
         }
@@ -1745,10 +1772,10 @@ namespace Cactus.Drivers
                     return false;
                 if (_element.Displayed)
                 {
-                    _logger.LogDebug(MyBy + " is displayed");
+                    _log.Debug(MyBy + " is displayed");
                     return true;
                 }
-                _logger.LogError(MyBy + " is not displayed");
+                _log.Error(MyBy + " is not displayed");
                 return false;
                 //return _element.Displayed;
             }
@@ -1797,7 +1824,7 @@ namespace Cactus.Drivers
                 
                 if (_element == null)
                     return false;
-                _logger.LogDebug("IsElementVisible: " + selector);
+                _log.Debug("IsElementVisible: " + selector);
 
                 var visibilityString = _element.GetAttribute("visibility");
                 if (visibilityString != null && !string.IsNullOrEmpty(visibilityString))
@@ -1890,7 +1917,7 @@ namespace Cactus.Drivers
                 return true;
             }
             // Log error for debugging needs.
-            _logger.LogError("Element is in wrong location." + Environment.NewLine +
+            _log.Error("Element is in wrong location." + Environment.NewLine +
                              "Element is at X:" + _element.Location.X + " Y:" + _element.Location.Y);
             return false;
         }
@@ -1905,10 +1932,10 @@ namespace Cactus.Drivers
                 getElement(highlight: false);
                 if (_element.Displayed)
                 {
-                    _logger.LogDebug(MyBy + " is Enabled");
+                    _log.Debug(MyBy + " is Enabled");
                     return _element.Enabled;
                 }
-                _logger.LogError(MyBy + " is not Enabled");
+                _log.Error(MyBy + " is not Enabled");
                 return _element.Enabled;
             }
         }
@@ -2002,10 +2029,10 @@ namespace Cactus.Drivers
                 getElement(refreshElement: true);
                 if (_element.Selected)
                 {
-                    _logger.LogDebug(MyBy + " is Selected");
+                    _log.Debug(MyBy + " is Selected");
                     return _element.Selected;
                 }
-                _logger.LogError(MyBy + " is not Selected");
+                _log.Error(MyBy + " is not Selected");
                 Support.ScreenShot();
                 return _element.Selected;
             }
@@ -2203,11 +2230,11 @@ namespace Cactus.Drivers
 
                 //if (_element.Displayed)
                 //{
-                //    _logger.LogDebug(MyBy + " is displayed");
+                //    _log.Debug(MyBy + " is displayed");
                 //}
                 //else
                 //{
-                //    _logger.LogError(MyBy + " is not displayed");
+                //    _log.Error(MyBy + " is not displayed");
                 //    Support.ScreenShot();
                 //}
                 return _element.Displayed;
@@ -2233,7 +2260,7 @@ namespace Cactus.Drivers
             getElement(highlight: false, safeMode: true, refreshElement: true);
             if (_element == null)
             {
-                _logger.LogDebug("HasClass Method was passed a null element. Elements need to be present before use.");
+                _log.Debug("HasClass Method was passed a null element. Elements need to be present before use.");
                 throw new Exception("HasClass was passed a null element. class= " + @class);
             }
             try
@@ -2341,7 +2368,7 @@ namespace Cactus.Drivers
                 return;
             }
             // may need to throw error here later.
-            _logger.LogError(MyBy + " is not Displayed");
+            _log.Error(MyBy + " is not Displayed");
             return;
 
         }
@@ -2449,7 +2476,7 @@ namespace Cactus.Drivers
             get
             {
                 getElement(highlight: false);
-                _logger.LogDebug("Location of element : " + MyBy + " is " + _element.Location);
+                _log.Debug("Location of element : " + MyBy + " is " + _element.Location);
                 return _element.Location;
             }
         }
@@ -2542,7 +2569,7 @@ namespace Cactus.Drivers
             }
             catch(Exception ex)
             {
-                _logger.LogError(MyBy + " could not be clicked", ex);
+                _log.Error(MyBy + " could not be clicked", ex);
                 Support.ScreenShot();
                 throw;
             }
@@ -2625,7 +2652,7 @@ namespace Cactus.Drivers
 
                 if (string.IsNullOrWhiteSpace(value))
                 {
-                    _logger.LogError("Value trying to be entered is blank, skipping since data is already cleared.:  " + MyBy);
+                    _log.Error("Value trying to be entered is blank, skipping since data is already cleared.:  " + MyBy);
                     return;
                 }
                 if (Engine.GetCurrentUrl.Contains("saml") ||
@@ -2640,7 +2667,7 @@ namespace Cactus.Drivers
                 }
                 else if (value.Length <= 2000)
                 {
-                    _logger.LogInfo("TextBox pasteText from: " + currentValue + " to " + value);
+                    _log.Info("TextBox pasteText from: " + currentValue + " to " + value);
                     _element.SendKeys(value);
                 }
                 else
@@ -2650,7 +2677,7 @@ namespace Cactus.Drivers
             }
             catch (Exception ex)
             {
-                _logger.LogError("PasteText method " + MyBy, ex);
+                _log.Error("PasteText method " + MyBy, ex);
                 throw;
             }
         }
@@ -2800,7 +2827,7 @@ namespace Cactus.Drivers
                                        "]').find('input[type=text]').siblings('input[type=hidden]').val('" +
                                        value.Replace(": ", ":") + "').trigger('selected');");
             }
-                       if (inlineEditable)
+            if (inlineEditable)
             {
                 try
                 {
@@ -2829,13 +2856,16 @@ namespace Cactus.Drivers
         /// </summary>
         /// <param name="text"></param>
         /// <param name="clearFirst"></param>
-        public void SetTextValue(string text, bool clearFirst =  true)
+        /// <param name="highlight"></param>
+        public void SetTextValue(string text, bool clearFirst =  true, bool highlight = true)
         {
             using (PerformanceTimer.Start(
                 ts => PerformanceTimer.LogTimeResult("SendKeys " + selector, ts)))
             {
                 Support.WaitForPageReadyState();
-                getElement();
+                WaitForElementVisible();
+
+                getElement(highlight: highlight);
                 try
                 {
                     // check for editable (clickable) element textbox type
@@ -2857,7 +2887,7 @@ namespace Cactus.Drivers
                             if (input == null)
                                 throw new NoSuchElementException("No element found to Type in");
 
-                            _logger.LogDebug("Typing " + text + " in " + selector);
+                            _log.Debug("Typing " + text + " in " + selector);
                             if (clearFirst)
                                 input.Clear();
                             if (text != "BLANK")
@@ -2908,7 +2938,7 @@ namespace Cactus.Drivers
                         }
                         catch (StaleElementReferenceException se)
                         {
-                            _logger.LogError("SetTextValue stale ref error", se);
+                            _log.Error("SetTextValue stale ref error", se);
                         }
                     }
                     else
@@ -2916,7 +2946,7 @@ namespace Cactus.Drivers
                         if (clearFirst) _element.Clear();
                         if (text != "BLANK")
                             _element.SendKeys(text);
-                        _logger.LogDebug("Typing " + text + " in " + selector);
+                        _log.Debug("Typing " + text + " in " + selector);
                     }
                 }
                 catch (Exception ex)
@@ -2925,7 +2955,7 @@ namespace Cactus.Drivers
                     //{
                     //    SetTextValue(text, clearFirst);
                     //}
-                    _logger.LogError("Unable to type " + text + " in " + selector, ex);
+                    _log.Error("Unable to type " + text + " in " + selector, ex);
                     Support.ScreenShot();
                     throw;
                 }
@@ -2959,7 +2989,7 @@ namespace Cactus.Drivers
                         // if the BY for this is given as the actual redactor control.
                         if (_element.GetAttribute("class").Contains("redactor-editor"))
                         {
-                            _logger.LogDebug("Typing " + text + " in " + selector);
+                            _log.Debug("Typing " + text + " in " + selector);
                             if (clearFirst)
                             {
                                 _element.Clear();
@@ -2984,7 +3014,7 @@ namespace Cactus.Drivers
                             var redactor = Engine.FindChildControl(parentElement: _element, by: OpenQA.Selenium.By.ClassName("redactor-editor"));  //div[@id='" + name + "']/form/input
                             if (redactor != null)
                             {
-                                _logger.LogDebug("Typing " + text + " in " + selector);
+                                _log.Debug("Typing " + text + " in " + selector);
                                 redactor.Click();
                                 Thread.Sleep(200);
                                 Support.WaitForPageReadyState();
@@ -3020,7 +3050,7 @@ namespace Cactus.Drivers
                         if (text != "BLANK")
                             _element.SendKeys(text);
                         Thread.Sleep(20);
-                        _logger.LogDebug("Typing " + text + " in " + selector);
+                        _log.Debug("Typing " + text + " in " + selector);
                     }
                 }
                 catch (Exception ex)
@@ -3029,7 +3059,7 @@ namespace Cactus.Drivers
                     //{
                     //    SetTextValue(text, clearFirst);
                     //}
-                    _logger.LogError("Unable to type " + text + " in " + selector, ex);
+                    _log.Error("Unable to type " + text + " in " + selector, ex);
                     Support.ScreenShot();
                     throw;
                 }
@@ -3120,13 +3150,13 @@ namespace Cactus.Drivers
             getElement();
             try
             {
-                _logger.LogDebug(value + " selected");
+                _log.Debug(value + " selected");
                 var select = new SelectElement(_element);
                 select.SelectByText(value);
             }
             catch
             {
-                _logger.LogDebug(value + " could not be selected");
+                _log.Debug(value + " could not be selected");
                 Support.ScreenShot();
                 throw;
             }
@@ -3141,13 +3171,13 @@ namespace Cactus.Drivers
             getElement(highlight: false);
             try
             {
-                _logger.LogDebug(index + " selected");
+                _log.Debug(index + " selected");
                 var select = new SelectElement(_element);
                 select.SelectByIndex(index);
             }
             catch
             {
-                _logger.LogError(index + " could not be selected");
+                _log.Error(index + " could not be selected");
                 Support.ScreenShot();
                 throw;
             }
@@ -3216,7 +3246,7 @@ namespace Cactus.Drivers
             }
             catch
             {
-                _logger.LogError(subText + " substring could not be selected");
+                _log.Error(subText + " substring could not be selected");
                 Support.ScreenShot();
                 throw;
             }
@@ -3309,7 +3339,7 @@ namespace Cactus.Drivers
                             }
                         }
                     }
-                    _logger.LogError("No LI with text value: " + text);
+                    _log.Error("No LI with text value: " + text);
                     return "No Data Found";
                 }
                 else
@@ -3324,7 +3354,7 @@ namespace Cactus.Drivers
                         }
                         catch (UnexpectedTagNameException unexpectedTagNameException)
                         {
-                            _logger.LogError("The Dropdown was incorrectly done.", unexpectedTagNameException);
+                            _log.Error("The Dropdown was incorrectly done.", unexpectedTagNameException);
                             getElement(highlight: false, refreshElement: true);
                             _element.Click();
                             getElement(highlight: false, refreshElement: true);
@@ -3373,7 +3403,7 @@ namespace Cactus.Drivers
                         }
                         else
                         {
-                            _logger.LogDebug("Error in seeing the value in the Select. Problem is scrolling.");
+                            _log.Debug("Error in seeing the value in the Select. Problem is scrolling.");
                             Engine.Execute<object>(
                                 "$sele = jQuery(arguments[0]); $sele.text('" + text + "')[0].scrollIntoView()", _element);
                             select.SelectByText(text);
@@ -3381,7 +3411,7 @@ namespace Cactus.Drivers
                             Support.WaitForPageReadyState();
                         }
                         //option.SendKeys(Keys.Tab);
-                        _logger.LogDebug(text + " selected");
+                        _log.Debug(text + " selected");
 
                         return text;
                     }
@@ -3389,7 +3419,7 @@ namespace Cactus.Drivers
                     {
                         if (!ex.Message.Contains("Element is not currently visible and so may not be interacted with"))
                             throw;
-                        _logger.LogDebug(ex.Message);
+                        _log.Debug(ex.Message);
                         return "";
                         // scroll somehow to allow for the select value to be in play.
                     }
@@ -3409,7 +3439,7 @@ namespace Cactus.Drivers
             }
             catch
             {
-                _logger.LogError(text + " could not be selected");
+                _log.Error(text + " could not be selected");
                 Support.ScreenShot();
                 throw;
             }
@@ -3461,7 +3491,7 @@ namespace Cactus.Drivers
                                 .Click()
                                 .Build()
                                 .Perform();
-                            _logger.LogDebug(value + " selected");
+                            _log.Debug(value + " selected");
                             break;
                         }
                     }
@@ -3478,20 +3508,20 @@ namespace Cactus.Drivers
                         }
                         else
                         {
-                            _logger.LogDebug("Error in seeing the value in the Select. Problem is scrolling.");
+                            _log.Debug("Error in seeing the value in the Select. Problem is scrolling.");
                             Engine.Execute<object>(
                                 "$sele = jQuery(arguments[0]); $sele.val('" + value + "')[0].scrollIntoView()", _element);
                             select.SelectByValue(value);
                         }
                         //option.SendKeys(Keys.Tab);
                         //Engine.FindElement(OpenQA.Selenium.By.TagName("body")).Click();
-                        _logger.LogDebug(value + " selected");
+                        _log.Debug(value + " selected");
                     }
                     catch (Exception ex)
                     {
                         if (!ex.Message.Contains("Element is not currently visible and so may not be interacted with"))
                             throw;
-                        _logger.LogDebug(ex.Message);
+                        _log.Debug(ex.Message);
                         // scroll somehow to allow for the select value to be in play.
                     }
                 }
@@ -3507,7 +3537,7 @@ namespace Cactus.Drivers
             }
             catch
             {
-                _logger.LogError(value + " could not be selected");
+                _log.Error(value + " could not be selected");
                 Support.ScreenShot();
                 throw;
             }
@@ -3561,7 +3591,7 @@ namespace Cactus.Drivers
                         }
                         break;
                     }
-                    _logger.LogDebug("SelectedOption: TagName unknown");
+                    _log.Debug("SelectedOption: TagName unknown");
                     return null;
                 }
                 catch (StaleElementReferenceException)
@@ -3571,7 +3601,7 @@ namespace Cactus.Drivers
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError("Could not see selected for by: " + MyBy, ex);
+                    _log.Error("Could not see selected for by: " + MyBy, ex);
                     Support.ScreenShot();
                     throw;
                 }
@@ -3604,7 +3634,7 @@ namespace Cactus.Drivers
                         var select = new SelectElement(_element.FindElement(By.TagName("select")));
                         return @select;
                     }
-                    _logger.LogDebug("Select Element: TagName unknown");
+                    _log.Debug("Select Element: TagName unknown");
                     return null;
                 }
                 catch (StaleElementReferenceException)
@@ -3614,7 +3644,7 @@ namespace Cactus.Drivers
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError("Could not see selectElement for by: " + MyBy, ex);
+                    _log.Error("Could not see selectElement for by: " + MyBy, ex);
                     Support.ScreenShot();
                     throw;
                 }
@@ -3676,14 +3706,14 @@ namespace Cactus.Drivers
             {
                 var select = new SelectElement(_element);
                 select.SelectByValue(value);
-                _logger.LogDebug(value + " selected");
+                _log.Debug(value + " selected");
 
                 Engine.Execute<object>(Engine.WebDriver, "return arguments[0].blur()", _element);
                 Engine.FindElement(OpenQA.Selenium.By.TagName("body")).SendKeys(Keys.Tab);
             }
             catch(Exception ex)
             {
-                _logger.LogError(value + " could not be selected", ex);
+                _log.Error(value + " could not be selected", ex);
                 Support.ScreenShot();
                 throw;
             }
@@ -3699,7 +3729,7 @@ namespace Cactus.Drivers
             getElement();
             try
             {
-                if (Engine.Browser == SupportedBrowserType.Ie)
+                if (Engine.Browser == SupportedBrowserType.Ie || Engine.Browser == SupportedBrowserType.Edge)
                 {
                     if (!_element.Displayed)
                     {
@@ -3731,12 +3761,12 @@ namespace Cactus.Drivers
                     _element.SendKeys(Keys.Enter);
                     return;
                 }
-                _logger.LogDebug("Typing " + text + " in " + selector);
+                _log.Debug("Typing " + text + " in " + selector);
                 _element.SendKeys(text);
             }
             catch (Exception ex)
             {
-                _logger.LogError("Unable to type " + text + " in " + MyBy + " : ", ex);
+                _log.Error("Unable to type " + text + " in " + MyBy + " : ", ex);
                 Support.ScreenShot();
                 throw;
             }
@@ -3758,7 +3788,7 @@ namespace Cactus.Drivers
                     if (clearFirst) _element.Clear();
                     if (text == "BLANK") return;
                     _element.SendKeys(text);
-                    _logger.LogDebug("Typing " + text + " in " + selector);
+                    _log.Debug("Typing " + text + " in " + selector);
                 }
                 catch (Exception ex)
                 {
@@ -3769,19 +3799,19 @@ namespace Cactus.Drivers
                         {
                             if (clearFirst) _element.Clear();
                             _element.SendKeys(text);
-                            _logger.LogDebug("Typing " + text + " in " + selector, ex);
+                            _log.Debug("Typing " + text + " in " + selector, ex);
                         }
                         catch (Exception ex2)
                         {
                             if (ex.Message.Contains("Element not found in the cache")) 
                             {
                             }
-                            _logger.LogError("Unable to type " + text + " in " + selector, ex2);
+                            _log.Error("Unable to type " + text + " in " + selector, ex2);
                             Support.ScreenShot();
                             throw;
                         }
                     }
-                    _logger.LogError("Unable to type " + text + " in " + selector, ex);
+                    _log.Error("Unable to type " + text + " in " + selector, ex);
                     Support.ScreenShot();
                     throw;
                 }
@@ -3874,11 +3904,11 @@ namespace Cactus.Drivers
             try
             {
                 _element.Submit();
-                _logger.LogDebug(MyBy + " submitted");
+                _log.Debug(MyBy + " submitted");
             }
             catch (Exception ex)
             {
-                _logger.LogError(MyBy + " failed to submit", ex);
+                _log.Error(MyBy + " failed to submit", ex);
                 Support.ScreenShot();
                 throw;
             }
@@ -3919,11 +3949,11 @@ namespace Cactus.Drivers
                 // find the grid.
                 var grid = new Control(How.XPath, "//table[contains(@id,'gridContainer_')]");
 
-                var by = OpenQA.Selenium.By.XPath(string.Format(".//td[contains(text(),'{0}')]", name));
+                var by = OpenQA.Selenium.By.XPath($".//td[contains(text(),'{name}')]");
                 var cell = grid.GetChildControl(by);
 
                 cell.DoubleClickAt(3, 3);
-                _logger.LogDebug(name + " double clicked");
+                _log.Debug(name + " double clicked");
                 cell.WaitForElementToNotBeVisible(16);
                 if (Engine.FindElement(By.TagName("table")) == null)
                     return;  // work is done.
@@ -3937,7 +3967,7 @@ namespace Cactus.Drivers
                     Thread.Sleep(100);
                     if (select.IsDisplayed)
                     {
-                        _logger.LogError("selectButton did not click correctly, element is still displayed.");
+                        _log.Error("selectButton did not click correctly, element is still displayed.");
                         var rowControl = cell.GetParentControl();
                         if (!rowControl.HasClass("ui-state-highlight"))
                         {
@@ -3949,11 +3979,11 @@ namespace Cactus.Drivers
                         {
                             select.ClickAt(5, 5);
                             if (select.IsDisplayed)
-                                _logger.LogError(
+                                _log.Error(
                                     "selectButton did not click correctly second time, element is still displayed.");
                         }
                     }
-                    _logger.LogDebug("selectButton clicked");
+                    _log.Debug("selectButton clicked");
                 }
                 // wait for page transitions
                 //Thread.Sleep(1000);
@@ -3961,7 +3991,7 @@ namespace Cactus.Drivers
             }
             catch (Exception ex)
             {
-                _logger.LogError(MyBy + " could not be clicked " , ex);
+                _log.Error(MyBy + " could not be clicked " , ex);
                 Support.ScreenShot();
                 throw;
             }
@@ -3984,7 +4014,7 @@ namespace Cactus.Drivers
             }
             if (iFrame == null)
                 throw new Exception("no iframe found for " + MyBy);
-            _logger.LogDebug("Switching to iframe: " + MyBy);
+            _log.Debug("Switching to iframe: " + MyBy);
             return Engine.WebDriver.SwitchTo().Frame(iFrame);
         }
 
@@ -4035,7 +4065,7 @@ namespace Cactus.Drivers
 
                     var regexObj = new Regex(@"[^\d]");
                     var digitOnly = regexObj.Replace(_element.Text, "");
-                    _logger.LogDebug("Digits found: " + digitOnly);
+                    _log.Debug("Digits found: " + digitOnly);
                     return digitOnly;
                 }
                 catch (StaleElementReferenceException)
@@ -4102,7 +4132,7 @@ namespace Cactus.Drivers
             }
             catch (Exception ex)
             {
-                _logger.LogError("Support.WaitUntilElementIsNotVisible", ex);
+                _log.Error("Support.WaitUntilElementIsNotVisible", ex);
             }
 
         }
@@ -4120,7 +4150,7 @@ namespace Cactus.Drivers
             catch (Exception ex)
             {
                 // ignore
-                _logger.LogError("Support.WaitUntilElementIsNotVisible", ex);
+                _log.Error("Support.WaitUntilElementIsNotVisible", ex);
             }
 
         }
@@ -4150,7 +4180,7 @@ namespace Cactus.Drivers
                 if (hoverAction)
                 {
                     var action = new Actions(Engine.WebDriver);
-                    action.MoveToElement(_element).Build().Perform();
+                    action.MoveToElement(element).Build().Perform();
                 }
 
                 return IsEnabled;
@@ -4178,7 +4208,7 @@ namespace Cactus.Drivers
                 if (hoverAction)
                 {
                     var action = new Actions(Engine.WebDriver);
-                    action.MoveToElement(_element).Build().Perform();
+                    action.MoveToElement(element).Build().Perform();
                 }
                 return true;
             }
@@ -4190,7 +4220,7 @@ namespace Cactus.Drivers
         }
 
         /// <summary>
-        /// Wait for Element to have text
+        /// Wait for Element to not have text
         /// </summary>
         public bool WaitForElementToNotHaveText(string text = "", int waitForSeconds = 10)
         {
@@ -4220,7 +4250,7 @@ namespace Cactus.Drivers
                 var script = xpathbuilder();
                 var command = "return getElementXPath(arguments[0]);";
                 var xpath = Engine.Execute<string>(Engine.WebDriver, script + " " + command, _element);
-                _logger.LogDebug(SelectorUsed + " has xpath = " + xpath);
+                _log.Debug(SelectorUsed + " has xpath = " + xpath);
                 return xpath;
             }
         }

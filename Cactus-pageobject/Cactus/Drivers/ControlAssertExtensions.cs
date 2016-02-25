@@ -3,18 +3,21 @@ using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
 using System.Linq;
+using System.Net;
 using System.Text.RegularExpressions;
 using System.Threading;
-using NUnit.Framework;
+using System.Threading.Tasks;
 using Cactus.Infrastructure;
+using Fiddler;
+using NUnit.Framework;
 using OpenQA.Selenium;
 using OpenQA.Selenium.Support.UI;
-using Should;
 
 namespace Cactus.Drivers
 {
     public static class ControlAssertExtensions
     {
+
         /// <summary>
         /// Asserts the class string for the element is expected
         /// StringAssert.Contains controlClass, controlAssert.Control.ClassList
@@ -27,11 +30,11 @@ namespace Cactus.Drivers
         {
             controlAssert.Control.WaitForElementClass(controlClass);
 
-            StringAssert.Contains(controlClass, controlAssert.Control.ClassList, "FAIL: " +
-                string.Format("{1} was expecting class : {0} {2} {0} and was :{3}{0}{4}", Environment.NewLine,
+            StringAssert.Contains(controlClass, controlAssert.Control.ClassList,
+                string.Format("FAIL: {1} was expecting class : {0} {2} {0} and was :{3}{0}{4}", Environment.NewLine,
                     controlAssert.Control.MyBy, controlClass, controlAssert.Control.ClassList, errorMessage));
 
-            new UxTestingLogger().LogInfo("PASS: " + string.Format("{1} was expecting class : {0} {2} {0} and was :{3}", Environment.NewLine,
+            Engine.Log.Info("PASS: " + string.Format("{1} was expecting class : {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, controlClass, controlAssert.Control.ClassList));
 
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -51,7 +54,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was expecting InnerHtml Value: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedText, controlAssert.Control.InnerHtml));
 
-            new UxTestingLogger().LogInfo("PASS: " + string.Format("{1} was expecting InnerHtml Value: {0} {2} {0} and was :{3}", Environment.NewLine,
+            Engine.Log.Info("PASS: " + string.Format("{1} was expecting InnerHtml Value: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedText, controlAssert.Control.InnerHtml));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
@@ -71,7 +74,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was expecting HREF: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedHref, controlAssert.Control.Href));
 
-            new UxTestingLogger().LogInfo("PASS: " +
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was expecting HREF: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedHref, controlAssert.Control.Href));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -109,7 +112,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was expecting text: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedText, controlAssert.Control.Text));
 
-            new UxTestingLogger().LogInfo("PASS: " + string.Format("{1} was expecting text: {0} {2} {0} and was :{3}", Environment.NewLine,
+            Engine.Log.Info("PASS: " + string.Format("{1} was expecting text: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedText, controlAssert.Control.Text));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
@@ -131,7 +134,7 @@ namespace Cactus.Drivers
             bool match = false;
             if (!string.IsNullOrEmpty(fieldFromRegex))
                 str = reg.Match(controlAssert.Control.Text).Groups[fieldFromRegex].Value;
-            else if(isMatch)
+            else if (isMatch)
             {
                 // isEmail : string reg = @"^((([\w]+\.[\w]+)+)|([\w]+))@(([\w]+\.)+)([A-Za-z]{1,3})$";
                 match = Regex.IsMatch(controlAssert.Control.Text, regexMatchPatern);
@@ -146,7 +149,7 @@ namespace Cactus.Drivers
                 Assert.IsTrue(match, "FAIL: " +
                         string.Format("{1} was using regex to look for text: {0} {2} {0} and was :{3}", Environment.NewLine,
                         controlAssert.Control.MyBy, expectedText, controlAssert.Control.Text));
-                new UxTestingLogger().LogInfo("PASS: " + string.Format("{1} was using regex to look for text: {0} {2} {0} and was :{3}", Environment.NewLine,
+                Engine.Log.Info("PASS: " + string.Format("{1} was using regex to look for text: {0} {2} {0} and was :{3}", Environment.NewLine,
                         controlAssert.Control.MyBy, expectedText, str));
             }
             else
@@ -154,7 +157,7 @@ namespace Cactus.Drivers
                 StringAssert.Contains(expectedText, str, "FAIL: " +
                     string.Format("{1} was expecting text: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedText, controlAssert.Control.Text));
-                new UxTestingLogger().LogInfo("PASS: " + string.Format("{1} was expecting text: {0} {2} {0} and was :{3}", Environment.NewLine,
+                Engine.Log.Info("PASS: " + string.Format("{1} was expecting text: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedText, str));
             }
 
@@ -175,7 +178,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was expecting RichText Editor Value: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedValue, controlAssert.Control.RichTextEditorValue));
 
-            new UxTestingLogger().LogInfo("PASS: " + 
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was expecting RichText Editor Value: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedValue, controlAssert.Control.RichTextEditorValue));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -195,7 +198,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was expecting src: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedSrc, controlAssert.Control.Src));
 
-            new UxTestingLogger().LogInfo("PASS: " + 
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was expecting src: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedSrc, controlAssert.Control.Src));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -225,7 +228,7 @@ namespace Cactus.Drivers
                                                                      controlAssert.Control.MyBy, expectedRowCount,
                                                                      dt.Rows.Count));
 
-                new UxTestingLogger().LogInfo("PASS: " +
+                Engine.Log.Info("PASS: " +
                                               string.Format(
                                                   "{1} did not have the right number of Table rows: {0}Expected: {2} {0} and was :{3}",
                                                   Environment.NewLine,
@@ -260,7 +263,7 @@ namespace Cactus.Drivers
                 }
                 else if (fieldName == null)
                 {
-                    Assert.IsTrue(dt.Rows[(int) rowId].ItemArray.Any(c => c.ToString().Contains(expectedText)),
+                    Assert.IsTrue(dt.Rows[(int)rowId].ItemArray.Any(c => c.ToString().Contains(expectedText)),
                         "FAIL: " + "Table did not include the text: " + expectedText);
                 }
                 else if (rowId == null)
@@ -270,7 +273,7 @@ namespace Cactus.Drivers
                 }
                 else
                 {
-                    var firstRow = dt.Rows[(int) rowId][fieldName].ToString();
+                    var firstRow = dt.Rows[(int)rowId][fieldName].ToString();
                     if (!firstRow.Any())
                     {
                         Assert.Fail(controlAssert.Control.MyBy +
@@ -283,7 +286,7 @@ namespace Cactus.Drivers
                                                                       controlAssert.Control.MyBy, expectedText, firstRow));
                 }
 
-                new UxTestingLogger().LogInfo("PASS: " + expectedText + " was found in grid/table");
+                Engine.Log.Info("PASS: " + expectedText + " was found in grid/table");
                 new TestLineStatusWithEvent().Status(TestStatus.Passed);
             }
             return true;
@@ -303,7 +306,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was expecting Count: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedCount, controlAssert.Control.Count));
 
-            new UxTestingLogger().LogInfo("PASS: " +
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was expecting Count: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedCount, controlAssert.Control.Count));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -327,7 +330,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was not expecting class : {0} {2} {0} and was :{3} {0} {4}", Environment.NewLine,
                     controlAssert.Control.MyBy, controlClass, controlAssert.Control.ClassList, errorMessage));
 
-            new UxTestingLogger().LogInfo("PASS: " + string.Format("{1} was not expecting class : {0} {2} {0} and was :{3}", Environment.NewLine,
+            Engine.Log.Info("PASS: " + string.Format("{1} was not expecting class : {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, controlClass, controlAssert.Control.ClassList));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
@@ -346,7 +349,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was not expecting InnerHtml Value: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, text, controlAssert.Control.InnerHtml));
 
-            new UxTestingLogger().LogInfo("PASS: " + string.Format("{1} was not expecting InnerHtml Value: {0} {2} {0} and was :{3}", Environment.NewLine,
+            Engine.Log.Info("PASS: " + string.Format("{1} was not expecting InnerHtml Value: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, text, controlAssert.Control.InnerHtml));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
@@ -366,7 +369,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was not expecting text: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, text, controlAssert.Control.Text));
 
-            new UxTestingLogger().LogInfo("PASS: " + string.Format("{1} was not expecting text: {0} {2} {0} and was :{3}", Environment.NewLine,
+            Engine.Log.Info("PASS: " + string.Format("{1} was not expecting text: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, text, controlAssert.Control.Text));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
@@ -385,7 +388,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was not expecting Digits: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, digits, controlAssert.Control.TextDigitsOnly));
 
-            new UxTestingLogger().LogInfo("PASS: " +
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was not expecting Digits: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, digits, controlAssert.Control.TextDigitsOnly));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -405,7 +408,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was not expecting Digits: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, digits, controlAssert.Control.TextDigitsOnly));
 
-            new UxTestingLogger().LogInfo("PASS: " +
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was not expecting Digits: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, digits, controlAssert.Control.TextDigitsOnly));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -426,7 +429,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was not expecting text: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, text, controlAssert.Control.Text));
 
-            new UxTestingLogger().LogInfo("PASS: " +
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was not expecting text: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, text, controlAssert.Control.Text));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -446,7 +449,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was not expecting text: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, value, controlAssert.Control.Text));
 
-            new UxTestingLogger().LogInfo("PASS: " +
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was not expecting text: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, value, controlAssert.Control.Value));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -463,7 +466,7 @@ namespace Cactus.Drivers
         {
             Assert.IsFalse(controlAssert.Control.IsValidOnPage, "FAIL: " + controlAssert.Control.MyBy + " does exist on page");
 
-            new UxTestingLogger().LogInfo("PASS: " + controlAssert.Control.MyBy + " exists not on page");
+            Engine.Log.Info("PASS: " + controlAssert.Control.MyBy + " exists not on page");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
         }
@@ -481,7 +484,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was expecting Digits: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedDigits, controlAssert.Control.TextDigitsOnly));
 
-            new UxTestingLogger().LogInfo("PASS: " + 
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was expecting Digits: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedDigits, controlAssert.Control.TextDigitsOnly));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -503,7 +506,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was expecting Digits: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedDigits, controlAssert.Control.TextDigitsOnly));
 
-            new UxTestingLogger().LogInfo("PASS: " + 
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was expecting Digits: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedDigits, controlAssert.Control.TextDigitsOnly));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -525,7 +528,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was expecting Digits: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedDigits, controlAssert.Control.TextDigitsOnly));
 
-            new UxTestingLogger().LogInfo("PASS: " +
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was expecting Digits: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedDigits, controlAssert.Control.TextDigitsOnly));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -545,11 +548,11 @@ namespace Cactus.Drivers
         {
             controlAssert.Control.WaitForElementVisible();
 
-            Assert.IsTrue(controlAssert.Control.IsElementInCorrectLocation(topX,topY,bottomX,bottomY), "FAIL: " +
+            Assert.IsTrue(controlAssert.Control.IsElementInCorrectLocation(topX, topY, bottomX, bottomY), "FAIL: " +
                 string.Format("{1} was expecting a different Location: {0} ", Environment.NewLine,
                     controlAssert.Control.MyBy));
 
-            new UxTestingLogger().LogInfo("PASS: " +
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was expecting Location: {0} {2} {0} and was :{2}", Environment.NewLine,
                     controlAssert.Control.MyBy, controlAssert.Control.Location));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -570,7 +573,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was expecting src: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedSrc, controlAssert.Control.Src));
 
-            new UxTestingLogger().LogInfo("PASS: " + 
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was expecting src: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedSrc, controlAssert.Control.Src));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -587,26 +590,42 @@ namespace Cactus.Drivers
         /// <returns></returns>
         public static bool ShouldEqualText(this ControlAsserts controlAssert, string expectedText, bool ignoreCase = true)
         {
-            controlAssert.Control.WaitForElementText(expectedText);
+            if (!string.IsNullOrEmpty(expectedText))
+            {
+                controlAssert.Control.WaitForElementText(expectedText);
+            }
+
+            controlAssert.Control.HoverOver(false);
+            var textToCompare = "";
+            if (!string.IsNullOrEmpty(controlAssert.Control.Value) &&
+                string.IsNullOrEmpty(controlAssert.Control.Text))
+            {
+                textToCompare = controlAssert.Control.Value;
+            }
+            else
+            {
+                textToCompare = controlAssert.Control.Text;
+            }
 
             if (ignoreCase)
             {
-                StringAssert.AreEqualIgnoringCase(expectedText, controlAssert.Control.Text, "FAIL: " +
+                StringAssert.AreEqualIgnoringCase(expectedText, textToCompare, "FAIL: " +
                 string.Format("{1} was expecting text: {0} {2} {0} and was :{3}", Environment.NewLine,
-                    controlAssert.Control.MyBy, expectedText, controlAssert.Control.Text));}
+                    controlAssert.Control.MyBy, expectedText, textToCompare));
+            }
             else
             {
-                if (controlAssert.Control.Text != expectedText)
+                if (textToCompare != expectedText)
                 {
                     Assert.Fail("FAIL: " +
                                 string.Format("{1} was expecting text: {0} {2} {0} and was :{3}", Environment.NewLine,
-                                    controlAssert.Control.MyBy, expectedText, controlAssert.Control.Text));
+                                    controlAssert.Control.MyBy, expectedText, textToCompare));
                 }
             }
 
-            new UxTestingLogger().LogInfo("PASS: " + 
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was expecting text: {0} {2} {0} and was :{3}", Environment.NewLine,
-                    controlAssert.Control.MyBy, expectedText, controlAssert.Control.Text));
+                    controlAssert.Control.MyBy, expectedText, textToCompare));
 
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
@@ -625,7 +644,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was expecting text: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedText, controlAssert.Control.Text));
 
-            new UxTestingLogger().LogInfo("PASS: " +
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was expecting text: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedText, controlAssert.Control.Value));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -643,7 +662,7 @@ namespace Cactus.Drivers
             controlAssert.Control.WaitForElementPresent();
             Assert.IsTrue(controlAssert.Control.IsValidOnPage, "FAIL: " + controlAssert.Control.MyBy + " does not exist on page");
 
-            new UxTestingLogger().LogInfo("PASS: " + controlAssert.Control.MyBy + " exists on page");
+            Engine.Log.Info("PASS: " + controlAssert.Control.MyBy + " exists on page");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
         }
@@ -672,7 +691,7 @@ namespace Cactus.Drivers
         {
             return ShouldContainClass(controlAssert, controlClass, errorMessage);
         }
-        
+
         /// <summary>
         /// Given a Select Control, this should find if an option is available.
         /// </summary>
@@ -696,7 +715,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was expecting option : {0} {2} {0} and was :{3}{0}{4}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedOptionText, options.ToString(), errorMessage));
 
-            new UxTestingLogger().LogInfo("PASS: " + string.Format("{1} was expecting class : {0} {2} {0} and was :{3}", Environment.NewLine,
+            Engine.Log.Info("PASS: " + string.Format("{1} was expecting class : {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedOptionText, options.ToString()));
 
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -713,7 +732,7 @@ namespace Cactus.Drivers
         {
             Assert.IsTrue(controlAssert.Control.IsButton, "FAIL: " + controlAssert.Control.MyBy + " was not a button");
 
-            new UxTestingLogger().LogInfo("PASS: " + controlAssert.Control.MyBy + " is a button");
+            Engine.Log.Info("PASS: " + controlAssert.Control.MyBy + " is a button");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
         }
@@ -728,7 +747,7 @@ namespace Cactus.Drivers
         {
             Assert.IsTrue(controlAssert.Control.IsChecked, "FAIL: " + controlAssert.Control.MyBy + " was not checked");
 
-            new UxTestingLogger().LogInfo("PASS: " + controlAssert.Control.MyBy + " is checked");
+            Engine.Log.Info("PASS: " + controlAssert.Control.MyBy + " is checked");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
         }
@@ -744,7 +763,7 @@ namespace Cactus.Drivers
         {
             Assert.IsTrue(controlAssert.Control.IsEditable, "FAIL: " + controlAssert.Control.MyBy + " was not an editable control");
 
-            new UxTestingLogger().LogInfo("PASS: " + controlAssert.Control.MyBy + " is an editable control");
+            Engine.Log.Info("PASS: " + controlAssert.Control.MyBy + " is an editable control");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
         }
@@ -759,7 +778,7 @@ namespace Cactus.Drivers
         {
             Assert.IsFalse(controlAssert.Control.IsDisabled, "FAIL: " + controlAssert.Control.MyBy + " was enabled");
 
-            new UxTestingLogger().LogInfo("PASS: " + controlAssert.Control.MyBy + " is enabled");
+            Engine.Log.Info("PASS: " + controlAssert.Control.MyBy + " is enabled");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
         }
@@ -777,7 +796,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was expecting Control ID : {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, controlId, controlAssert.Control.Id));
 
-            new UxTestingLogger().LogInfo("PASS: " + 
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was expecting Control ID : {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, controlId, controlAssert.Control.Id));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -795,7 +814,7 @@ namespace Cactus.Drivers
         {
             Assert.IsTrue(controlAssert.Control.IsDisabled, "FAIL: " + controlAssert.Control.MyBy + " was not in Disabled state");
 
-            new UxTestingLogger().LogInfo("PASS: " + controlAssert.Control.MyBy + " is in Disabled state");
+            Engine.Log.Info("PASS: " + controlAssert.Control.MyBy + " is in Disabled state");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
         }
@@ -811,7 +830,7 @@ namespace Cactus.Drivers
             controlAssert.Control.WaitForElementPresent();
             Assert.IsTrue(controlAssert.Control.IsDisplayed, "FAIL: " + controlAssert.Control.MyBy + " was not displayed");
 
-            new UxTestingLogger().LogInfo("PASS: " + controlAssert.Control.MyBy + " is displayed");
+            Engine.Log.Info("PASS: " + controlAssert.Control.MyBy + " is displayed");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
         }
@@ -826,7 +845,7 @@ namespace Cactus.Drivers
         {
             Assert.IsFalse(controlAssert.Control.IsVisible, "FAIL: " + controlAssert.Control.MyBy + " was visible");
 
-            new UxTestingLogger().LogInfo("PASS: " + controlAssert.Control.MyBy + " is not visible");
+            Engine.Log.Info("PASS: " + controlAssert.Control.MyBy + " is not visible");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
         }
@@ -841,7 +860,7 @@ namespace Cactus.Drivers
         {
             Assert.IsTrue(controlAssert.Control.IsButton, "FAIL: " + controlAssert.Control.MyBy + " was a button");
 
-            new UxTestingLogger().LogInfo("PASS: " + controlAssert.Control.MyBy + " is not a button");
+            Engine.Log.Info("PASS: " + controlAssert.Control.MyBy + " is not a button");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
         }
@@ -856,7 +875,7 @@ namespace Cactus.Drivers
         {
             Assert.IsFalse(controlAssert.Control.IsChecked, "FAIL: " + controlAssert.Control.MyBy + " was checked");
 
-            new UxTestingLogger().LogInfo("PASS: " + controlAssert.Control.MyBy + " is checked");
+            Engine.Log.Info("PASS: " + controlAssert.Control.MyBy + " is checked");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
         }
@@ -871,7 +890,7 @@ namespace Cactus.Drivers
         {
             Assert.IsFalse(controlAssert.Control.IsDisabled, "FAIL: " + controlAssert.Control.MyBy + " was in Disabled state");
 
-            new UxTestingLogger().LogInfo("PASS: " + controlAssert.Control.MyBy + " is not in Disabled state");
+            Engine.Log.Info("PASS: " + controlAssert.Control.MyBy + " is not in Disabled state");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
         }
@@ -887,7 +906,7 @@ namespace Cactus.Drivers
         {
             Assert.IsFalse(controlAssert.Control.IsEditable, "FAIL: " + controlAssert.Control.MyBy + " was an editable control");
 
-            new UxTestingLogger().LogInfo("PASS: " + controlAssert.Control.MyBy + " is not an editable control");
+            Engine.Log.Info("PASS: " + controlAssert.Control.MyBy + " is not an editable control");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
         }
@@ -902,7 +921,7 @@ namespace Cactus.Drivers
         {
             Assert.IsFalse(controlAssert.Control.IsNull, "FAIL: " + controlAssert.Control.MyBy + " was null");
 
-            new UxTestingLogger().LogInfo("PASS: " + controlAssert.Control.MyBy + " is not null");
+            Engine.Log.Info("PASS: " + controlAssert.Control.MyBy + " is not null");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
         }
@@ -918,7 +937,7 @@ namespace Cactus.Drivers
         {
             Assert.IsFalse(controlAssert.Control.IsElementVisible, "FAIL: " + controlAssert.Control.MyBy + " was visible");
 
-            new UxTestingLogger().LogInfo("PASS: " + controlAssert.Control.MyBy + " is not visible");
+            Engine.Log.Info("PASS: " + controlAssert.Control.MyBy + " is not visible");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
         }
@@ -933,7 +952,7 @@ namespace Cactus.Drivers
         {
             Assert.IsTrue(controlAssert.Control.IsNull, "FAIL: " + controlAssert.Control.MyBy + " was not null");
 
-            new UxTestingLogger().LogInfo("PASS: " + controlAssert.Control.MyBy + " is null");
+            Engine.Log.Info("PASS: " + controlAssert.Control.MyBy + " is null");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
         }
@@ -949,7 +968,7 @@ namespace Cactus.Drivers
             Assert.IsTrue(controlAssert.Control.IsRichTextEditor, "FAIL: " +
                 controlAssert.Control.MyBy + " was not a RichTextbox (redactor)");
 
-            new UxTestingLogger().LogInfo("PASS: " + 
+            Engine.Log.Info("PASS: " +
                 controlAssert.Control.MyBy + " is a RichTextbox (redactor)");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
@@ -966,7 +985,7 @@ namespace Cactus.Drivers
             Assert.IsFalse(controlAssert.Control.IsRichTextEditor, "FAIL: " +
                 controlAssert.Control.MyBy + " was a RichTextbox (redactor)");
 
-            new UxTestingLogger().LogInfo("PASS: " +
+            Engine.Log.Info("PASS: " +
                 controlAssert.Control.MyBy + " is not a RichTextbox (redactor)");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
@@ -982,7 +1001,7 @@ namespace Cactus.Drivers
         {
             Assert.IsTrue(controlAssert.Control.IsSelected, "FAIL: " + controlAssert.Control.MyBy + " was not selected");
 
-            new UxTestingLogger().LogInfo("PASS: " + controlAssert.Control.MyBy + " is selected");
+            Engine.Log.Info("PASS: " + controlAssert.Control.MyBy + " is selected");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
         }
@@ -996,7 +1015,7 @@ namespace Cactus.Drivers
         {
             Assert.IsTrue(controlAssert.Control.IsValidOnPage, "FAIL: " + controlAssert.Control.MyBy + " was not present on page");
 
-            new UxTestingLogger().LogInfo("PASS: " + controlAssert.Control.MyBy + " is present on page");
+            Engine.Log.Info("PASS: " + controlAssert.Control.MyBy + " is present on page");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
         }
@@ -1010,7 +1029,7 @@ namespace Cactus.Drivers
         {
             Assert.IsFalse(controlAssert.Control.IsValidOnPage, "FAIL: " + controlAssert.Control.MyBy + " was present on page");
 
-            new UxTestingLogger().LogInfo("PASS: " + controlAssert.Control.MyBy + " is not present on page");
+            Engine.Log.Info("PASS: " + controlAssert.Control.MyBy + " is not present on page");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
         }
@@ -1025,7 +1044,7 @@ namespace Cactus.Drivers
         {
             Assert.IsFalse(controlAssert.Control.IsSelected, "FAIL: " + controlAssert.Control.MyBy + " was selected");
 
-            new UxTestingLogger().LogInfo("PASS: " + controlAssert.Control.MyBy + " is not selected");
+            Engine.Log.Info("PASS: " + controlAssert.Control.MyBy + " is not selected");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
         }
@@ -1041,7 +1060,7 @@ namespace Cactus.Drivers
         {
             Assert.IsTrue(controlAssert.Control.IsTextBox, "FAIL: " + controlAssert.Control.MyBy + " was not a Textbox (input)");
 
-            new UxTestingLogger().LogInfo("PASS: " + controlAssert.Control.MyBy + " is a Textbox (input)");
+            Engine.Log.Info("PASS: " + controlAssert.Control.MyBy + " is a Textbox (input)");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
         }
@@ -1057,7 +1076,7 @@ namespace Cactus.Drivers
         {
             Assert.IsFalse(controlAssert.Control.IsTextBox, "FAIL: " + controlAssert.Control.MyBy + " was a Textbox (input)");
 
-            new UxTestingLogger().LogInfo("PASS: " + controlAssert.Control.MyBy + " is not a Textbox (input)");
+            Engine.Log.Info("PASS: " + controlAssert.Control.MyBy + " is not a Textbox (input)");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
         }
@@ -1073,7 +1092,7 @@ namespace Cactus.Drivers
             Assert.IsTrue(controlAssert.Control.IsUberDropdown, "FAIL: " +
                 controlAssert.Control.MyBy + " was not an UberDropdown (special selector)");
 
-            new UxTestingLogger().LogInfo("PASS: " + 
+            Engine.Log.Info("PASS: " +
                 controlAssert.Control.MyBy + " is an UberDropdown (special selector)");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
@@ -1087,11 +1106,16 @@ namespace Cactus.Drivers
         /// <returns></returns>
         public static bool IsVisible(this ControlAsserts controlAssert)
         {
-            controlAssert.Control.WaitForElementVisible();
+            var isVisible = controlAssert.Control.WaitForElementVisible();
+            if (!isVisible)
+            {
+                new UxTestingLogger().Error("Initial FAIL: " + controlAssert.Control.MyBy + " is not visible initially");
+                Support.ScreenShot();
+            }
 
             Assert.IsTrue(controlAssert.Control.IsElementVisible, "FAIL: " + controlAssert.Control.MyBy + " was not visible");
 
-            new UxTestingLogger().LogInfo("PASS: " + controlAssert.Control.MyBy + " is visible");
+            Engine.Log.Info("PASS: " + controlAssert.Control.MyBy + " is visible");
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
         }
@@ -1114,7 +1138,7 @@ namespace Cactus.Drivers
 
             var stringlistFromTest = listFromTest.Aggregate("", (current, item) => current + "," + item).Remove(0, 1);
             var expectedlistFromTest = expectedText.Aggregate("", (current, item) => current + "," + item).Remove(0, 1);
-            new UxTestingLogger().LogInfo("PASS: " + string.Format("{1} was expecting text: {0} {2} {0} and was :{3}", Environment.NewLine,
+            Engine.Log.Info("PASS: " + string.Format("{1} was expecting text: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedlistFromTest, stringlistFromTest));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
@@ -1149,7 +1173,7 @@ namespace Cactus.Drivers
                     controlAssert.Control.MyBy, expectedText, stringlistFromTest));
             }
 
-            new UxTestingLogger().LogInfo("PASS: " + string.Format("{1} was expecting text: {0} {2} {0} and was :{3}", Environment.NewLine,
+            Engine.Log.Info("PASS: " + string.Format("{1} was expecting text: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedText, stringlistFromTest));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
             return true;
@@ -1169,7 +1193,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was expecting Control Name : {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, controlName, controlAssert.Control.Name));
 
-            new UxTestingLogger().LogInfo("PASS: " + 
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was expecting Control Name : {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, controlName, controlAssert.Control.Name));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -1189,7 +1213,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was not expecting Control Name : {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, controlName, controlAssert.Control.Name));
 
-            new UxTestingLogger().LogInfo("PASS: " +
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was not expecting Control Name : {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, controlName, controlAssert.Control.Name));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -1209,7 +1233,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was expecting MaxLength: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedMaxLength, controlAssert.Control.TextDigitsOnly));
 
-            new UxTestingLogger().LogInfo("PASS: " +
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was expecting MaxLength: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedMaxLength, controlAssert.Control.MaxLength));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -1230,7 +1254,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was expecting Selected Text Displayed: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedText, controlAssert.Control.SelectedTextDisplayed));
 
-            new UxTestingLogger().LogInfo("PASS: " + 
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was expecting Selected Text Displayed: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedText, controlAssert.Control.SelectedTextDisplayed));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -1250,7 +1274,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was not expecting Selected Text Displayed: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, text, controlAssert.Control.SelectedTextDisplayed));
 
-            new UxTestingLogger().LogInfo("PASS: " +
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was not expecting Selected Text Displayed: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, text, controlAssert.Control.SelectedTextDisplayed));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -1270,7 +1294,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was expecting Selected Value: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedValue, controlAssert.Control.SelectedValue));
 
-            new UxTestingLogger().LogInfo("PASS: " + 
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was expecting Selected Value: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedValue, controlAssert.Control.SelectedValue));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -1290,7 +1314,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was not expecting Selected Value: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, value, controlAssert.Control.SelectedValue));
 
-            new UxTestingLogger().LogInfo("PASS: " +
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was not expecting Selected Value: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, value, controlAssert.Control.SelectedValue));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -1310,7 +1334,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was expecting Selected Value: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedValue, controlAssert.Control.SelectedValue));
 
-            new UxTestingLogger().LogInfo("PASS: " +
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was expecting Selected Value: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, expectedValue, controlAssert.Control.SelectedValue));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -1330,7 +1354,7 @@ namespace Cactus.Drivers
                 string.Format("{1} was not expecting Selected Value: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, value, controlAssert.Control.SelectedValue));
 
-            new UxTestingLogger().LogInfo("PASS: " +
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} was not expecting Selected Value: {0} {2} {0} and was :{3}", Environment.NewLine,
                     controlAssert.Control.MyBy, value, controlAssert.Control.SelectedValue));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -1353,7 +1377,7 @@ namespace Cactus.Drivers
                 string.Format("{1} does not have attribute {0}{2}{0} or the attribute value did not equal: {0}{3}{0} and was: {4}", Environment.NewLine,
                     controlAssert.Control.MyBy, attributeName, expectedValue, actualValue));
 
-            new UxTestingLogger().LogInfo("PASS: " +
+            Engine.Log.Info("PASS: " +
                 string.Format("{1} has attribute {0}{2}{0} and the expected value: {0}{3}{0} matched the actual: {4}", Environment.NewLine,
                     controlAssert.Control.MyBy, attributeName, expectedValue, actualValue));
             new TestLineStatusWithEvent().Status(TestStatus.Passed);
@@ -1373,11 +1397,89 @@ namespace Cactus.Drivers
                 new TestLineStatusWithEvent().Status(TestStatus.Failed);
             }
         }
+    }
 
-        public static IEnumerable<T> ShouldHaveCount<T>(this IEnumerable<T> actual, int expected)
+    public static class SessionAssertExtensions
+    {
+        /// <summary>
+        /// Assert the Status code of the Fiddler Session is equal(int) to that of the Test Case.
+        /// </summary>
+        /// <param name="sessionAssert"></param>
+        /// <param name="expectedStatusCode"></param>
+        /// <returns></returns>
+        public static bool ShouldHaveStatusCode(this Session sessionAssert, int expectedStatusCode)
         {
-            actual.Count().ShouldEqual(expected);
-            return actual;
+            Assert.AreEqual(expectedStatusCode, sessionAssert.responseCode, "FAIL: " +
+                string.Format("{1} was expecting Status Code Returned Value: {0} {2} {0} and was :{3}", Environment.NewLine,
+                    sessionAssert.url, expectedStatusCode, sessionAssert.responseCode));
+
+            Engine.Log.Info("PASS: " +
+                string.Format("{1} was expecting Status Code Returned Value: {0} {2} {0} and was :{3}", Environment.NewLine,
+                    sessionAssert.url, expectedStatusCode, sessionAssert.responseCode));
+            new TestLineStatusWithEvent().Status(TestStatus.Passed);
+            return true;
+        }
+
+        /// <summary>
+        /// Assert the Status code of the Fiddler Session is equal(int) to that of the Test Case.
+        /// </summary>
+        /// <param name="sessionAssert"></param>
+        /// <param name="expectedStatusCode"></param>
+        /// <returns></returns>
+        public static bool ShouldHaveStatusCode(this Session sessionAssert, HttpStatusCode expectedStatusCode)
+        {
+            Assert.AreEqual((int)expectedStatusCode, sessionAssert.responseCode, "FAIL: " +
+                string.Format("{1} was expecting Status Code Returned Value: {0} {2} {0} and was :{3}", Environment.NewLine,
+                    sessionAssert.url, (int)expectedStatusCode, sessionAssert.responseCode));
+
+            Engine.Log.Info("PASS: " +
+                string.Format("{1} was expecting Status Code Returned Value: {0} {2} {0} and was :{3}", Environment.NewLine,
+                    sessionAssert.url, (int)expectedStatusCode, sessionAssert.responseCode));
+            new TestLineStatusWithEvent().Status(TestStatus.Passed);
+            return true;
+        }
+
+        /// <summary>
+        /// Assert the Fiddler Session is less than the TimeSpan inserted for the test case.
+        /// </summary>
+        /// <param name="sessionAssert"></param>
+        /// <param name="timeSpan"></param>
+        /// <returns></returns>
+        public static bool ShouldNotTakeLongerThan(this Session sessionAssert, TimeSpan timeSpan)
+        {
+            var totalRequestTime = (sessionAssert.Timers.ClientDoneResponse - sessionAssert.Timers.FiddlerBeginRequest);
+
+            Assert.GreaterOrEqual(timeSpan, totalRequestTime, "FAIL: " +
+                string.Format("{1} was expecting the Page Load time to be less than: {0} {2} {0} and was :{3}", Environment.NewLine,
+                    sessionAssert.url, timeSpan, totalRequestTime));
+
+            Engine.Log.Info("PASS: " +
+                string.Format("{1} was expecting the Page Load time to be less than: {0} {2} {0} and was :{3}", Environment.NewLine,
+                    sessionAssert.url, timeSpan, totalRequestTime));
+            new TestLineStatusWithEvent().Status(TestStatus.Passed);
+            return true;
+        }
+
+        /// <summary>
+        /// Assert that in the Fiddler Session cache, that the page/url was only loaded X times.
+        /// </summary>
+        /// <param name="sessionAssert"></param>
+        /// <param name="partialUrl"></param>
+        /// <param name="expectedQty"></param>
+        /// <returns></returns>
+        public static bool ShouldHaveBeenLoadedXTimes(this List<Session> sessionAssert, string partialUrl, int expectedQty)
+        {
+            var filteredSessions = sessionAssert.Where(x => x.url.ToLower().Contains(partialUrl.ToLower()));
+            var enumerable = filteredSessions as IList<Session> ?? filteredSessions.ToList();
+            Assert.AreEqual(expectedQty, enumerable.Count(), "FAIL: " +
+                string.Format("{1} was expecting the Page Load to be loaded: {0} {2} times {0} and was :{3}", Environment.NewLine,
+                    partialUrl, expectedQty, enumerable.Count()));
+
+            Engine.Log.Info("PASS: " +
+                string.Format("{1} was expecting the Page Load time to be less than: {0} {2} {0} and was :{3}", Environment.NewLine,
+                    partialUrl, expectedQty, enumerable.Count()));
+            new TestLineStatusWithEvent().Status(TestStatus.Passed);
+            return true;
         }
     }
 
@@ -1411,25 +1513,28 @@ namespace Cactus.Drivers
 
         public void Status(TestStatus testLineStatus)
         {
-            switch (testLineStatus)
+            Task.Run(() =>
             {
-                case TestStatus.Failed:
-                    OnFailed(EventArgs.Empty);
-                    OnComplete(EventArgs.Empty);
-                    break;
-                case TestStatus.Passed:
-                    OnPassed(EventArgs.Empty);
-                    OnComplete(EventArgs.Empty);
-                    break;
-                case TestStatus.Skipped:
-                    OnComplete(EventArgs.Empty);
-                    break;
-                case TestStatus.Inconclusive:
-                    OnComplete(EventArgs.Empty);
-                    break;
-            }
+                switch (testLineStatus)
+                {
+                    case TestStatus.Failed:
+                        OnFailed(EventArgs.Empty);
+                        OnComplete(EventArgs.Empty);
+                        break;
+                    case TestStatus.Passed:
+                        OnPassed(EventArgs.Empty);
+                        OnComplete(EventArgs.Empty);
+                        break;
+                    case TestStatus.Skipped:
+                        OnComplete(EventArgs.Empty);
+                        break;
+                    case TestStatus.Inconclusive:
+                        OnComplete(EventArgs.Empty);
+                        break;
+                }
+            });
         }
-}
+    }
 
     /// <summary>
     /// The ControlAsserts class is so that if you have a Control, it will allow you to use the methods as extensions of a Control in:

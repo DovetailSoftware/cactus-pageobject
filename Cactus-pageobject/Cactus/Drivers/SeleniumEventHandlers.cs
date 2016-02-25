@@ -2,27 +2,27 @@
 using System.Diagnostics;
 using System.Reflection;
 using System.Threading;
-using OpenQA.Selenium.Support.Events;
 using Cactus.Infrastructure;
 using OpenQA.Selenium;
+using OpenQA.Selenium.Support.Events;
 
 namespace Cactus.Drivers
 {
     public class SeleniumEventHandlers
     {
-        readonly UxTestingLogger _log;
-        public UxTestingLogger Log { get { return _log; } }
+        readonly ILogger _log;
+        public ILogger Log { get { return _log; } }
         public SeleniumEventHandlers()
         {
-            _log = new UxTestingLogger();
+            _log = LogManager.GetLogger(null);
         }
 
         public void firingDriver_ExceptionThrown(object sender, WebDriverExceptionEventArgs e)
         {
-            if (e.ThrownException.GetType() == typeof(NoSuchElementException))
-            {
-                _log.LogException(e.ThrownException);
-            }
+            //if (e.ThrownException.GetType() == typeof (NoSuchElementException)) 
+            //{
+            //    _log.Exception(e.ThrownException);       
+            //}
 
             if (e.ThrownException.Message.Contains("sending an HTTP request to the remote WebDriver server") ||
                 e.ThrownException.Message.Contains("No session ID specified"))
@@ -46,6 +46,8 @@ namespace Cactus.Drivers
                 return; //ignore these.
             }
 
+            Support.ScreenShot();
+
             //OpenQA.Selenium.UnhandledAlertException: unexpected alert open
             if (e.ThrownException.GetType() == typeof(UnhandledAlertException))
             {
@@ -53,62 +55,69 @@ namespace Cactus.Drivers
                 return;
             }
 
-            _log.LogError(getReflectionUsage(), e.ThrownException);
-            Support.ScreenShot();
+            _log.Error(getReflectionUsage(), e.ThrownException);
         }
 
+        public void firingDriver_AlertExceptionThrown(object sender, WebDriverExceptionEventArgs e)
+        {
+            //OpenQA.Selenium.UnhandledAlertException: unexpected alert open
+            if (e.ThrownException.GetType() == typeof(UnhandledAlertException))
+            {
+                Support.ScreenShot();
+                _log.Error(getReflectionUsage(), e.ThrownException);
+                Engine.AlertAccept();
+            }
+        }
         public void firingDriver_FindingElement(object sender, FindElementEventArgs e)
         {
-            _log.LogDebug(string.Format("FindingElement from {0} {1}",
-                e.Element == null ? "IWebDriver " : "IWebElement ",
-                e.FindMethod.ToString()));
+            _log.Debug(
+                $"FindingElement from {(e.Element == null ? "IWebDriver " : "IWebElement ")} {e.FindMethod.ToString()}");
         }
 
         public void firingDriver_FindElementCompleted(object sender, FindElementEventArgs e)
         {
-            _log.LogDebug(string.Format("FindElementCompleted from {0} {1}",
-                e.Element == null ? "IWebDriver " : "IWebElement ",
-                e.FindMethod.ToString()));
+            _log.Debug(
+                $"FindElementCompleted from {(e.Element == null ? "IWebDriver " : "IWebElement ")} {e.FindMethod.ToString()}");
         }
 
         public void firingDriver_ElementClicking(object sender, WebElementEventArgs e)
         {
-            _log.LogDebug("Clicking");
+            _log.Debug("Clicking");
         }
 
         public void firingDriver_ElementClicked(object sender, WebElementEventArgs e)
         {
-            _log.LogDebug("Clicked");
+            _log.Debug("Clicked");
         }
 
         public void firingDriver_Navigating(object sender, WebDriverNavigationEventArgs e)
         {
-            _log.LogDebug(string.Format("Navigating {0}", e.Url));
+            _log.Debug($"Navigating {e.Url}");
         }
 
         public void firingDriver_Navigated(object sender, WebDriverNavigationEventArgs e)
         {
-            _log.LogDebug(string.Format("Navigated {0}", e.Url));
+            _log.Debug($"Navigated {e.Url}");
         }
 
         public void firingDriver_NavigatingBack(object sender, WebDriverNavigationEventArgs e)
         {
-            _log.LogDebug("Navigating back");
+            _log.Debug("Navigating back");
         }
 
         public void firingDriver_NavigatedBack(object sender, WebDriverNavigationEventArgs e)
         {
-            _log.LogDebug("Navigated back");
+            _log.Debug("Navigated back");
         }
 
         public void firingDriver_NavigatingForward(object sender, WebDriverNavigationEventArgs e)
         {
-            _log.LogDebug("Navigating forward");
+            _log.Debug("Navigating forward");
         }
 
         public void firingDriver_NavigatedForward(object sender, WebDriverNavigationEventArgs e)
         {
-            _log.LogDebug("Navigated forward");
+            _log.Debug("Navigated forward");
         }
 
         private static string getReflectionUsage(int maxReflection = 5)

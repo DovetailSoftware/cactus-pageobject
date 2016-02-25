@@ -46,12 +46,8 @@ namespace Cactus.Drivers
         public string Version;
         public static string BaseUrl { get; set; }
         public static string ServerHost { get; set; }
-        private static UxTestingLogger _log;
-
-        public static UxTestingLogger Log
-        {
-            get { return _log; }
-        }
+        static ILogger _log;
+        public static ILogger Log { get { return _log; } }
 
         public Engine()
         {
@@ -188,7 +184,7 @@ namespace Cactus.Drivers
                         cookie.Value,
                         cookie.Path,
                         cookie.Domain);
-                Log.LogInfo(cookieToText);
+                Log.Info(cookieToText);
             }
         }
 
@@ -241,7 +237,7 @@ namespace Cactus.Drivers
 
                     if (!string.IsNullOrEmpty(fileData))
                     {
-                        Log.LogInfo(fileData.Trim() + " Selected for browser");
+                        Log.Info(fileData.Trim() + " Selected for browser");
                         if (fileData.ToLower().Contains("edge"))
                             return SupportedBrowserType.Edge;
                         if (fileData.ToLower().Contains("chrome"))
@@ -255,7 +251,7 @@ namespace Cactus.Drivers
                     }
                     if (!string.IsNullOrEmpty(environmentData))
                     {
-                        Log.LogInfo(environmentData.Trim() + " Selected for browser");
+                        Log.Info(environmentData.Trim() + " Selected for browser");
                         if (environmentData.ToLower().Contains("edge"))
                             return SupportedBrowserType.Edge;
                         if (environmentData.ToLower().Contains("chrome"))
@@ -291,7 +287,7 @@ namespace Cactus.Drivers
                 else if (isJenkins == "true")
                 {
                     var size = new Size(1920, 2200);
-                    Log.LogInfo("Setting the browser window size to {0}", size);
+                    Log.Info("Setting the browser window size to {0}", size);
                     Engine.Execute<object>("window.resizeTo(1920, 2080);");
                     WebDriver.Manage().Window.Size = size;
                 }
@@ -300,14 +296,14 @@ namespace Cactus.Drivers
                     WebDriver.Manage().Window.Maximize();
                 }
                 var resizedSize = WebDriver.Manage().Window.Size;
-                Log.LogInfo("Browser window size is {0}x{1}", resizedSize.Width, resizedSize.Height);
+                Log.Info("Browser window size is {0}x{1}", resizedSize.Width, resizedSize.Height);
 
             }
             catch (Exception ex)
             {
                 var resizedSize = WebDriver.Manage().Window.Size;
-                Log.LogError(
-                    string.Format("ERROR: Browser window size is {0}x{1}", resizedSize.Width, resizedSize.Height),
+                Log.Error(
+                    $"ERROR: Browser window size is {resizedSize.Width}x{resizedSize.Height}",
                     exception: ex);
             }
 
@@ -373,13 +369,13 @@ namespace Cactus.Drivers
             try
             {
                 Engine.Browser = browserType;
-                Log.LogDebug(browserType + " Setup Engine Selected.");
+                Log.Debug(browserType + " Setup Engine Selected.");
             }
             catch (Exception ex)
             {
-                Log.LogError("SetupEngine: " + ex);
+                Log.Error("SetupEngine: " + ex);
                 Engine.Browser = DefaultBrowserType;
-                Log.LogDebug(DefaultBrowserType + " Setup Engine Selected by default.");
+                Log.Debug(DefaultBrowserType + " Setup Engine Selected by default.");
             }
 
             _driverType = String.IsNullOrEmpty(driverType) ? "Local" : driverType;
@@ -394,7 +390,7 @@ namespace Cactus.Drivers
             if (_driverType.ToLower() == "local")
             {
                 BaseUrl = String.IsNullOrEmpty(Url) ? ServerHost + "agent/" : Url;
-                Log.LogDebug(startEngine.Url);
+                Log.Debug(startEngine.Url);
             }
             else if (_driverType.ToLower().Contains("browser"))
             {
@@ -411,10 +407,10 @@ namespace Cactus.Drivers
 
             if (_driverType.ToLower() == "local")
             {
-                Log.LogDebug("Loading browser: " + Engine.Browser);
+                Log.Debug("Loading browser: " + Engine.Browser);
 
                 BaseUrl = String.IsNullOrEmpty(Url) ? ServerHost + "agent/" : Url;
-                Log.LogDebug(startEngine.Url);
+                Log.Debug(startEngine.Url);
 
                 if (Engine.Browser == SupportedBrowserType.Ie) // Internet Explorer
                 {
@@ -494,8 +490,8 @@ namespace Cactus.Drivers
             {
                 var myIp = Support.GetPublicIP();
 
-                BaseUrl = String.IsNullOrEmpty(Url) ? string.Format("http://{0}/agent/", myIp) : Url;
-                Log.LogDebug(startEngine.Url);
+                BaseUrl = String.IsNullOrEmpty(Url) ? $"http://{myIp}/agent/" : Url;
+                Log.Debug(startEngine.Url);
 
                 DesiredCapabilities browserCap;
 
@@ -535,7 +531,7 @@ namespace Cactus.Drivers
             {
                 var myIp = Support.GetPublicIP();
 
-                BaseUrl = String.IsNullOrEmpty(Url) ? string.Format("http://{0}/agent/", myIp) : Url;
+                BaseUrl = String.IsNullOrEmpty(Url) ? $"http://{myIp}/agent/" : Url;
                 Debug.WriteLine(startEngine.Url);
 
                 const string browserstackHost = "http://hub.browserstack.com:80/wd/hub/";
@@ -634,7 +630,7 @@ namespace Cactus.Drivers
         public object RunCommand(string commandText, params object[] arguments)
         {
             var args = Array.ConvertAll(arguments, x => "\"" + x.ToString().Replace("\"", "'") + "\"");
-            var script = string.Format("this.{0}({1})", commandText, String.Join(", ", args, 1));
+            var script = $"this.{commandText}({String.Join(", ", args, 1)})";
 
             Debug.WriteLine("Running:  " + script);
 
@@ -789,7 +785,7 @@ namespace Cactus.Drivers
                     {
                         //recover
                         Engine.WebDriver.SwitchTo().Window(windowHandles.First());
-                        Log.LogInfo("GoToUrl autoRecovery #1 to first Window");
+                        Log.Info("GoToUrl autoRecovery #1 to first Window");
                         Support.WaitForPageReadyState(TimeSpan.FromSeconds(16));
                         return WebDriver.Url;
                     }
@@ -800,15 +796,15 @@ namespace Cactus.Drivers
                     {
                         //recover
                         Engine.WebDriver.SwitchTo().Window(windowHandles.First());
-                        Log.LogInfo("GoToUrl autoRecovery #2 to first Window");
+                        Log.Info("GoToUrl autoRecovery #2 to first Window");
                         Support.WaitForPageReadyState(TimeSpan.FromSeconds(16));
                         return WebDriver.Url;
                     }
 
                     // declare that Webdriver is not open.
-                    Log.LogError("NoSuchWindowException Details: " + Environment.NewLine +
+                    Log.Error("NoSuchWindowException Details: " + Environment.NewLine +
                                  "No window Handles at all in the WebDriver engine.");
-                    Log.LogException(noWindowException);
+                    Log.Exception(noWindowException);
                     throw;
                 }
             }
@@ -874,7 +870,7 @@ namespace Cactus.Drivers
         /// </summary>
         public static void RefreshPage()
         {
-            Log.LogDebug("# Reloading Page");
+            Log.Debug("# Reloading Page");
             Engine.WebDriver.Navigate().Refresh();
         }
 
@@ -1092,7 +1088,7 @@ namespace Cactus.Drivers
         {
             lock (_lock)
             {
-                Log.LogInfo("Initializing {0} web driver browser instance", browserType);
+                Log.Info("Initializing {0} web driver browser instance", browserType);
 
                 var engine = SetupEngine(
                     browserType,
@@ -1101,7 +1097,7 @@ namespace Cactus.Drivers
 
                 if (engine == null || WebDriver == null)
                 {
-                    Log.LogInfo("Engine has not started.");
+                    Log.Info("Engine has not started.");
                     throw new Exception("Error setting engine window size.  Engine was not detected.");
                 }
 
@@ -1117,7 +1113,7 @@ namespace Cactus.Drivers
                 }
                 catch (Exception e)
                 {
-                    Log.LogError("Problem configuring RemoteWebDriver. ", e);
+                    Log.Error("Problem configuring RemoteWebDriver. ", e);
                     Assert.Fail("Problem configuring RemoteWebDriver.");
                 }
             }
@@ -1130,13 +1126,13 @@ namespace Cactus.Drivers
         {
             try
             {
-                Log.LogDebug(string.Format("Waiting for {0} to be present.", by));
+                Log.Debug($"Waiting for {@by} to be present.");
                 var element = Support.WaitUntilElementIsPresent(by, waitTimeSpan);
                 return element;
             }
             catch (Exception ex)
             {
-                Log.LogException(ex);
+                Log.Exception(ex);
             }
             return null;
         }
@@ -1148,13 +1144,13 @@ namespace Cactus.Drivers
         {
             try
             {
-                Log.LogDebug(string.Format("Waiting for {0} to exist / be present.", by));
+                Log.Debug($"Waiting for {@by} to exist / be present.");
                 var element = Support.WaitUntilElementIsPresent(by, waitTimeSpan);
                 return element;
             }
             catch (Exception ex)
             {
-                Log.LogException(ex);
+                Log.Exception(ex);
             }
             return null;
         }
@@ -1166,13 +1162,13 @@ namespace Cactus.Drivers
         {
             try
             {
-                Log.LogDebug(string.Format("Waiting for {0} to exist / be present.", by));
+                Log.Debug($"Waiting for {@by} to exist / be present.");
                 var element = Support.WaitUntilElementIsPresent(by);
                 return element;
             }
             catch (Exception ex)
             {
-                Log.LogException(ex);
+                Log.Exception(ex);
             }
             return null;
         }
@@ -1184,13 +1180,13 @@ namespace Cactus.Drivers
         {
             try
             {
-                Log.LogDebug(string.Format("Waiting for {0} to exist / be present.", by));
+                Log.Debug($"Waiting for {@by} to exist / be present.");
                 var element = Support.WaitUntilElementIsPresent(by);
                 return element;
             }
             catch (Exception ex)
             {
-                Log.LogException(ex);
+                Log.Exception(ex);
             }
             return null;
         }
@@ -1697,7 +1693,7 @@ namespace Cactus.Drivers
             }
             catch (Exception ex)
             {
-                _log.LogError("FindElement issue: " + ex);
+                Log.Error("FindElement issue: " + ex);
                 //ignore
                 return null;
             }
@@ -1723,7 +1719,7 @@ namespace Cactus.Drivers
             }
             catch (Exception ex)
             {
-                _log.LogError("FindElement issue: " + ex);
+                Log.Error("FindElement issue: " + ex);
                 //ignore
                 return null;
             }
@@ -1749,7 +1745,7 @@ namespace Cactus.Drivers
             }
             catch (Exception ex)
             {
-                _log.LogError("FindElement issue: " + ex);
+                Log.Error("FindElement issue: " + ex);
                 //ignore
                 return null;
             }
@@ -2298,7 +2294,7 @@ namespace Cactus.Drivers
                     {
                         return false;
                     }
-                    Log.LogDebug("403 Forbidden Page");
+                    Log.Debug("403 Forbidden Page");
                     Support.ScreenShot();
                     return true;
                 }
@@ -2322,7 +2318,7 @@ namespace Cactus.Drivers
                     {
                         return false;
                     }
-                    Log.LogDebug("404 error found in page");
+                    Log.Debug("404 error found in page");
                     Support.ScreenShot();
                     return true;
                 }
@@ -2353,7 +2349,7 @@ namespace Cactus.Drivers
                 {
                     return false;
                 }
-                Log.LogDebug("500 error found in page");
+                Log.Debug("500 error found in page");
                 Support.ScreenShot();
                 return true;
             }
@@ -2420,7 +2416,7 @@ namespace Cactus.Drivers
             Support.WaitForPageReadyState();
             var frameElement = FindElement(
                 OpenQA.Selenium.By.XPath(
-                    string.Format("//iframe[contains(@{0},'{1}')]", @attribute, value)));
+                    $"//iframe[contains(@{@attribute},'{value}')]"));
             if (frameElement == null)
                 return null;
             var newFrame = Engine.WebDriver.SwitchTo().Frame(frameElement);
@@ -2442,7 +2438,7 @@ namespace Cactus.Drivers
             }
             if (iFrame == null)
                 throw new Exception("no iframe found for " + src);
-            _log.LogDebug("Switching to iframe: " + src);
+            Log.Debug("Switching to iframe: " + src);
             return Engine.WebDriver.SwitchTo().Frame(iFrame);
         }
 
@@ -2460,7 +2456,7 @@ namespace Cactus.Drivers
             }
             if (iFrame == null)
                 throw new Exception("no iframe found for " + @class);
-            _log.LogDebug("Switching to iframe: " + @class);
+            Log.Debug("Switching to iframe: " + @class);
             return Engine.WebDriver.SwitchTo().Frame(iFrame);
 
         }
@@ -2483,7 +2479,7 @@ namespace Cactus.Drivers
         /// </summary>
         public static void SwitchOutofiFrames()
         {
-            _log.LogInfo("Switching out of iFrames");
+            Log.Info("Switching out of iFrames");
             WebDriver.SwitchTo().Window(WebDriver.WindowHandles.First());
             // WebDriver.SwitchTo().DefaultContent();
         }
@@ -2494,7 +2490,7 @@ namespace Cactus.Drivers
         /// </summary>
         public static void SwitchOutToDefaultContent()
         {
-            _log.LogInfo("Switching out to DefaultContext");
+            Log.Info("Switching out to DefaultContext");
             WebDriver.SwitchTo().DefaultContent();
         }
 
