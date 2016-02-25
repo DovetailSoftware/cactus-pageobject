@@ -14,11 +14,11 @@ using System.Threading;
 using Amazon;
 using Amazon.S3;
 using Amazon.S3.Transfer;
+using Cactus.Infrastructure;
 using Microsoft.CSharp.RuntimeBinder;
 using OpenQA.Selenium;
 using OpenQA.Selenium.Interactions;
 using OpenQA.Selenium.Support.UI;
-using Cactus.Infrastructure;
 
 namespace Cactus.Drivers
 {
@@ -28,9 +28,9 @@ namespace Cactus.Drivers
     /// </summary>
     public class Support
     {
-        public static string ScreenShotFolder = @"c:\screenshots\";
-        public const int DEFAULT_WAIT_SECONDS = 8;
-        static UxTestingLogger _log;
+        public static string ScreenShotFolder = @"c:\cactus_screenshots\";
+        public const int DEFAULT_WAIT_SECONDS = 12;
+        static ILogger _log;
 
         #region Screen Shot
 
@@ -41,7 +41,7 @@ namespace Cactus.Drivers
         {
             try
             {
-                _log = new UxTestingLogger();
+                _log = LogManager.GetLogger(null);
 
                 if (Engine.WebDriver == null)
                 {
@@ -56,43 +56,41 @@ namespace Cactus.Drivers
                 {
                     var jobName = Environment.GetEnvironmentVariable("JOB_NAME") ?? "local";
 
-                    screenShotFileName = string.Format("{0}_{1}_{2}_{3}.png",
-                        jobName.Replace("/BROWSER=Chrome,", "").Replace("/BROWSER=Firefox,", ""),
-                        Environment.GetEnvironmentVariable("BUILD_NUMBER") ?? "1",
-                        timestamp,
-                        Guid.NewGuid().ToString("N"));
+                    screenShotFileName =
+                        $"{jobName.Replace("/BROWSER=Chrome,label=StoryTeller", "").Replace("/BROWSER=Firefox,label=StoryTeller", "")}_{Environment.GetEnvironmentVariable("BUILD_NUMBER") ?? "1"}_{timestamp}_{Guid.NewGuid().ToString("N")}.png";
                 }
                 else
                 {
-                    screenShotFileName = string.Format("{0}_{1}.png",
-                        timestamp,
-                        Guid.NewGuid().ToString("N"));
+                    screenShotFileName = $"{timestamp}_{Guid.NewGuid().ToString("N")}.png";
                 }
 
                 if (Convert.ToBoolean(ConfigurationManager.AppSettings["S3StorageUsage"]) &&
                     Environment.GetEnvironmentVariable("isjenkins") != null && (
-                    Environment.GetEnvironmentVariable("PARENT_BUILD_NUMBER") != null || File.Exists(@"c:\parentBuildNumber.txt"))
-                   )
+                        Environment.GetEnvironmentVariable("PARENT_BUILD_NUMBER") != null ||
+                        File.Exists(@"c:\parentBuildNumber.txt"))
+                    )
                 {
                     var regionName = Environment.GetEnvironmentVariable("SCREENSHOT_S3_REGION") ?? "us-west-2";
-                    var bucketName = Environment.GetEnvironmentVariable("SCREENSHOT_S3_BUCKET") ?? "jenkins-artifacts.us-west-2.dovetailnow.com";
+                    var bucketName = Environment.GetEnvironmentVariable("SCREENSHOT_S3_BUCKET") ??
+                                     "jenkins-artifacts.us-west-2.dovetailnow.com";
                     var regionEndpoint = RegionEndpoint.GetBySystemName(regionName);
                     var baseS3Url = regionEndpoint.GetEndpointForService("s3");
 
-                    var parentbuildNumber = Environment.GetEnvironmentVariable("PARENT_BUILD_NUMBER") ?? File.ReadAllText(@"c:\parentBuildNumber.txt");
-                    var s3Link = string.Format(@"https://{0}/{1}/storyteller_screenshots/Blue/{2}/{3}", baseS3Url, bucketName, parentbuildNumber.Trim(), screenShotFileName);
-                    _log.LogInfo(string.Format("ScreenShot file on s3:{0}{1}", Environment.NewLine, s3Link));
+                    var parentbuildNumber = Environment.GetEnvironmentVariable("PARENT_BUILD_NUMBER") ??
+                                            File.ReadAllText(@"c:\parentBuildNumber.txt");
+                    var s3Link =
+                        $@"https://{baseS3Url}/{bucketName}/storyteller_screenshots/Blue/{parentbuildNumber.Trim()}/{
+                            screenShotFileName}";
+                    _log.Info($"ScreenShot file on s3:{Environment.NewLine}{s3Link}");
 
                     try
                     {
                         uploadToScreenshotToS3(screenshot, regionEndpoint, bucketName,
-                            string.Format("storyteller_screenshots/Blue/{0}/{1}",
-                            parentbuildNumber.Trim(),
-                            screenShotFileName));
+                            $"storyteller_screenshots/Blue/{parentbuildNumber.Trim()}/{screenShotFileName}");
                     }
                     catch (Exception s3Ex)
                     {
-                        _log.LogError("Could not upload screenshot to S3:", exception: s3Ex);
+                        _log.Error("Could not upload screenshot to S3:", exception: s3Ex);
                     }
                 }
                 else
@@ -100,21 +98,24 @@ namespace Cactus.Drivers
                     Directory.CreateDirectory(ScreenShotFolder);
                     cleanupOldScreenShotFiles();
                     screenshot.SaveAsFile(ScreenShotFolder + screenShotFileName, System.Drawing.Imaging.ImageFormat.Png);
-                    _log.LogInfo(string.Format("ScreenShot file saved locally as file:///" + ScreenShotFolder + screenShotFileName).Replace(@"\","/"));
+                    _log.Info(
+                        string.Format("ScreenShot file saved locally as file:///" + ScreenShotFolder +
+                                      screenShotFileName).Replace(@"\", "/"));
                 }
             }
-                        catch (ArgumentException)
+            catch (ArgumentException ar)
             {
                 //ignore
+                _log.Exception(ar);
                 //System.ArgumentException: Search context must be a RemoteWebDriver Parameter name: browserDriver
             }
             catch (FileNotFoundException fileEx)
             {
-                _log.LogError("File not found for screenshot ", exception: fileEx);
+                _log.Error("File not found for screenshot ", exception: fileEx);
             }
             catch (DirectoryNotFoundException dirEx)
             {
-                _log.LogError("Directory not found for screenshot ", exception: dirEx);
+                _log.Error("Directory not found for screenshot ", exception: dirEx);
             }
             catch (IOException)
             {
@@ -129,7 +130,7 @@ namespace Cactus.Drivers
             }
             catch (Exception ex)
             {
-                _log.LogError("Error saving ScreenShot of Selenium Test ", exception: ex);
+                _log.Error("Error saving ScreenShot of Selenium Test ", exception: ex);
             }
 
         }
@@ -434,7 +435,7 @@ namespace Cactus.Drivers
         {
             if (string.IsNullOrEmpty(expected))
                 throw new Exception("WaitForUrlToContain: expected string was empty");
-            _log = new UxTestingLogger();
+            _log = LogManager.GetLogger(null);
 
             using (PerformanceTimer.Start(
                 timer => PerformanceTimer.LogTimeResult("WaitForUrlToContain", timer)))
@@ -454,8 +455,8 @@ namespace Cactus.Drivers
                         {
                             if (!Engine.WebDriver.Url.ToLower().Contains(expected.ToLower())) return false;
 
-                            _log = new UxTestingLogger();
-                            _log.LogDebug("Current URL = " + Engine.WebDriver.Url);
+                            _log = LogManager.GetLogger(null);
+                            _log.Debug("Current URL = " + Engine.WebDriver.Url);
                             WaitForPageReadyState(waitTimeSpan);
                             return true;
                         }
@@ -468,11 +469,11 @@ namespace Cactus.Drivers
 
                 catch (WebDriverTimeoutException timeoutException)
                 {
-                    _log.LogError("FAIL: WaitForUrlToContain ", timeoutException);
+                    _log.Error("FAIL: WaitForUrlToContain ", timeoutException);
                 }
                 catch (Exception ex)
                 {
-                    _log.LogError("FAIL: WaitForUrlToContain " + expected, ex);
+                    _log.Error("FAIL: WaitForUrlToContain " + expected, ex);
                 }
 
             }
@@ -549,7 +550,7 @@ namespace Cactus.Drivers
         /// <returns></returns>
         public static void WaitUntilAlertIsPresent(TimeSpan waitTimeSpan)
         {
-            _log = new UxTestingLogger();
+            _log = LogManager.GetLogger(null);
 
             using (PerformanceTimer.Start(
                 timer => PerformanceTimer.LogTimeResult("WaitUntilAlertIsPresent ", timer)))
@@ -566,12 +567,12 @@ namespace Cactus.Drivers
                 }
                 catch (WebDriverTimeoutException)
                 {
-                    _log.LogError("Alert was never made present. TimeoutException");
+                    _log.Error("Alert was never made present. TimeoutException");
                     ScreenShot();
                 }
                 catch (TimeoutException)
                 {
-                    _log.LogError("Alert was never made present. TimeoutException");
+                    _log.Error("Alert was never made present. TimeoutException");
                     ScreenShot();
                 }
             }
@@ -595,7 +596,7 @@ namespace Cactus.Drivers
         /// <returns></returns>
         public static void WaitUntilAlertState(bool state, TimeSpan waitTimeSpan)
         {
-            _log = new UxTestingLogger();
+            _log = LogManager.GetLogger(null);
 
             using (PerformanceTimer.Start(
                 timer => PerformanceTimer.LogTimeResult("WaitUntilAlertState ", timer)))
@@ -612,12 +613,12 @@ namespace Cactus.Drivers
                 }
                 catch (WebDriverTimeoutException)
                 {
-                    _log.LogError("Alert was never in the correct state. TimeoutException");
+                    _log.Error("Alert was never in the correct state. TimeoutException");
                     ScreenShot();
                 }
                 catch (TimeoutException)
                 {
-                    _log.LogError("Alert was never in the correct state. TimeoutException");
+                    _log.Error("Alert was never in the correct state. TimeoutException");
                     ScreenShot();
                 }
             }
@@ -896,7 +897,7 @@ namespace Cactus.Drivers
             {
                 throw new Exception("No by statement was given for this wait call.");
             }
-            _log = new UxTestingLogger();
+            _log = LogManager.GetLogger(null);
 
             using (PerformanceTimer.Start(
                 timer => PerformanceTimer.LogTimeResult("WaitUntilElementIsPresent " + by, timer)))
@@ -914,22 +915,22 @@ namespace Cactus.Drivers
                 }
                 catch (WebDriverTimeoutException)
                 {
-                    _log = new UxTestingLogger();
-                    _log.LogError(by + " was never made present. TimeoutException");
+                    _log = LogManager.GetLogger(null);
+                    _log.Error(by + " was never made present. TimeoutException");
                     ScreenShot();
                     return null;
                 }
                 catch (TimeoutException)
                 {
-                    _log = new UxTestingLogger();
-                    _log.LogError(by + " was never made present. TimeoutException");
+                    _log = LogManager.GetLogger(null);
+                    _log.Error(by + " was never made present. TimeoutException");
                     ScreenShot();
                     return null;
                 }
                 catch (NoSuchElementException)
                 {
-                    _log = new UxTestingLogger();
-                    _log.LogError(by + " was never made present. NoSuchElementException");
+                    _log = LogManager.GetLogger(null);
+                    _log.Error(by + " was never made present. NoSuchElementException");
                     ScreenShot();
                     return null;
                 }
@@ -1010,7 +1011,7 @@ namespace Cactus.Drivers
                     }
                     else
                     {
-                        wait.Until(d => Engine.FindElement(@by).Text.Contains(text));
+                        wait.Until(d => Engine.FindElement(@by).Text.Contains(text) || (Engine.FindElement(@by).GetAttribute("value")?.Contains(text) ?? false));
                     }
 
                     return Engine.FindElement(by);

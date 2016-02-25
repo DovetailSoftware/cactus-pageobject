@@ -1,9 +1,8 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Text;
-using System.Collections.Generic;
-using Cactus.Infrastructure;
 using NUnit.Framework;
 using OpenQA.Selenium;
 
@@ -11,8 +10,9 @@ namespace Cactus.Drivers
 {
     public static class NunitExtensions
     {
+
         /// <summary>
-        /// AssertAll will allow you to group asserts and Pass/Fail report on all of them at exit of test run.
+        /// Assert All using Actions and Objects
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <param name="objects"></param>
@@ -35,14 +35,14 @@ namespace Cactus.Drivers
                 catch (InconclusiveException assertion)
                 {
                     inconclusive++;
-                    string message = string.Format("INCONCLUSIVE: {0}: {1}", obj.ToString(), assertion.Message);
+                    string message = $"INCONCLUSIVE: {obj.ToString()}: {assertion.Message}";
                     Console.WriteLine(message);
                     sb.AppendLine(message);
                 }
                 catch (AssertionException assertion)
                 {
                     failed++;
-                    string message = string.Format("FAILED: {0}: {1}", obj.ToString(), assertion.Message);
+                    string message = $"FAILED: {obj.ToString()}: {assertion.Message}";
                     Console.WriteLine(message);
                     sb.AppendLine(message);
                 }
@@ -51,8 +51,7 @@ namespace Cactus.Drivers
             if (passed != total)
             {
                 string details = sb.ToString();
-                string message = string.Format("{0} of {1} tests passed; {2} inconclusive\n{3}", passed, total,
-                    inconclusive, details);
+                string message = $"{passed} of {total} tests passed; {inconclusive} inconclusive\n{details}";
 
 
                 if (failed == 0)
@@ -95,7 +94,7 @@ namespace Cactus.Drivers
             }
             else
             {
-                dataTableShouldBeClone = dataTableShouldBe.Clone(); 
+                dataTableShouldBeClone = dataTableShouldBe.Clone();
             }
             changeTypeColNames.Clear();
 
@@ -123,7 +122,7 @@ namespace Cactus.Drivers
             }
             else
             {
-                dataTableFromTestCaseClone = dataTableFromTestCase.Clone(); 
+                dataTableFromTestCaseClone = dataTableFromTestCase.Clone();
             }
             foreach (DataRow dr in dataTableFromTestCase.Rows)
             {
@@ -287,8 +286,8 @@ namespace Cactus.Drivers
                     dataListShouldBe.Count(),
                     dataListFromTestCase.Count(),
                     Environment.NewLine,
-                    string.Join(",", dataListFromTestCase.Select(i=>i.ToString()).ToArray()),
-                    string.Join(",", dataListShouldBe.Select(i=>i.ToString()).ToArray())
+                    string.Join(",", dataListFromTestCase.Select(i => i.ToString()).ToArray()),
+                    string.Join(",", dataListShouldBe.Select(i => i.ToString()).ToArray())
                     ));
             }
             // 2
@@ -342,11 +341,11 @@ namespace Cactus.Drivers
                     {
                         Support.ScreenShot();
                     }
-                    Assert.Fail(string.Format("The list count should have been {0}, but was {1}{2}Data from Test Was: [{3}]",
+                    Assert.Fail("The list count should have been {0}, but was {1}{2}Data from Test Was: [{3}]",
                                         dataListShouldBe.Count(),
                                         dataListFromTestCase.Count(),
                                         Environment.NewLine,
-                                        d));
+                                        d);
                 }
             }
 
@@ -372,7 +371,7 @@ namespace Cactus.Drivers
                 string.Format("Test line was expecting url : {0} {1} {0} and was :{2}", Environment.NewLine,
                     expectedFullurl, currentUrl) + Environment.NewLine + message);
 
-            new UxTestingLogger().LogInfo("PASS: " +
+            Engine.Log.Info("PASS: " +
                 string.Format("Test line was expecting url : {0} {1} {0} and was :{2}", Environment.NewLine,
                     expectedFullurl, currentUrl));
 
@@ -396,7 +395,7 @@ namespace Cactus.Drivers
                 string.Format("Test line was expecting url : {0} {1} {0} and was :{2}", Environment.NewLine,
                     expectedPartialUrl.ToLower(), currentUrl.ToLower()) + Environment.NewLine + message);
 
-            new UxTestingLogger().LogInfo("PASS: " +
+            Engine.Log.Info("PASS: " +
                 string.Format("Test line was expecting url : {0} {1} {0} and was :{2}", Environment.NewLine,
                     expectedPartialUrl.ToLower(), currentUrl.ToLower()));
 
@@ -440,7 +439,7 @@ namespace Cactus.Drivers
             }
             else
             {
-                new UxTestingLogger().LogInfo("PASS: " +
+                Engine.Log.Info("PASS: " +
                     string.Format("Test line was expecting text in the Collection : {0} {1} {0} and is :{2}", Environment.NewLine,
                     exceptedText, returnElement.Text));
 
@@ -450,7 +449,7 @@ namespace Cactus.Drivers
             return null;
         }
 
-           /// <summary>
+        /// <summary>
         /// Just to make our testing easier, all ourselves to use the real SequenceEquals
         /// call from LINQ to Objects.
         /// </summary>
@@ -460,7 +459,7 @@ namespace Cactus.Drivers
                     ",".InsertBetween(expected.Select(x => Convert.ToString(x))) + "; " + Environment.NewLine + "was: " +
                     ",".InsertBetween(actual.Select(x => Convert.ToString(x))));
 
-            new UxTestingLogger().LogInfo("PASS: " + "Expected: " +
+            Engine.Log.Info("PASS: " + "Expected: " +
                     ",".InsertBetween(expected.Select(x => Convert.ToString(x))) + "; " + Environment.NewLine + "was: " +
                     ",".InsertBetween(actual.Select(x => Convert.ToString(x))));
 
@@ -473,8 +472,16 @@ namespace Cactus.Drivers
         /// </summary>
         public static void AssertSequenceEqual<T>(this IEnumerable<T> actual, params T[] expected)
         {
+            if (!actual.Any())
+            {
+                Assert.Fail("Expected: " +
+                    ",".InsertBetween(expected.Select(x => Convert.ToString(x))) + "; was: " +
+                    "Empty Array");
+            }
+
             // Working with a copy means we can look over it more than once.
             // We're safe to do that with the array anyway.
+
             var copy = actual.ToList();
             var result = copy.SequenceEqual(expected);
             // Looks nicer than Assert.IsTrue or Assert.That, unfortunately.
@@ -485,7 +492,7 @@ namespace Cactus.Drivers
                     ",".InsertBetween(copy.Select(x => Convert.ToString(x))));
             }
 
-            new UxTestingLogger().LogInfo("PASS: " + "Expected: " +
+            Engine.Log.Info("PASS: " + "Expected: " +
                     ",".InsertBetween(expected.Select(x => Convert.ToString(x))) + "; " + Environment.NewLine + "was: " +
                     ",".InsertBetween(actual.Select(x => Convert.ToString(x))));
         }

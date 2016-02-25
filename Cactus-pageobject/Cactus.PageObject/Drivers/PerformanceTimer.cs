@@ -3,9 +3,9 @@ using System.Configuration;
 using System.Diagnostics;
 using System.Reflection;
 using System.Text.RegularExpressions;
-
 using Cactus.Infrastructure;
 using Cactus.Infrastructure.NStatsD;
+using System.Threading.Tasks;
 
 namespace Cactus.Drivers
 {
@@ -63,8 +63,7 @@ namespace Cactus.Drivers
             }
             catch (Exception ex)
             {
-                var log4Net = new UxTestingLogger();
-                log4Net.LogError(ex.Message);
+                Debug.WriteLine(ex.Message);
             }
 
         }
@@ -74,14 +73,16 @@ namespace Cactus.Drivers
             var urlPart = string.Empty;
             if (fullUrl.Length > 0)
             {
-                LogStatsD(urlPart, timeSpan);
+                Task.Run(() =>
+                {
+                    LogStatsD(urlPart, timeSpan);
+                });
             }
         }
 
         private static void LogInfo(string message)
         {
-            var log4Net = new UxTestingLogger();
-            log4Net.LogInfo(message);
+            LogManager.GetLogger(null).Info(message);
         }
 
         private static void LogStatsD(string urlPart, TimeSpan timeSpan)
@@ -97,8 +98,7 @@ namespace Cactus.Drivers
             }
             catch (Exception ex)
             {
-                var log4Net = new UxTestingLogger();
-                log4Net.LogError(ex.Message);
+                Debug.WriteLine(ex.Message);
             }
         }
 

@@ -1,13 +1,11 @@
 ﻿using System;
 using System.Collections;
-using System.ComponentModel;
 using System.Configuration;
 using System.Diagnostics;
 using System.Threading;
 using Cactus.Drivers;
 using Cactus.Infrastructure;
 using Cactus.Infrastructure.NStatsD;
-
 using NUnit.Framework;
 using Should;
 
@@ -16,11 +14,8 @@ namespace Cactus.TestCases
     [TestFixture]
     public abstract class TestBase
     {
-
-        readonly UxTestingLogger _log;
-
-        public UxTestingLogger Log { get { return _log; } }
-
+        readonly ILogger _log;
+        public ILogger Log { get { return _log; } }
         readonly Stopwatch _stopwatch = new Stopwatch();
 
         protected TestBase()
@@ -42,7 +37,7 @@ namespace Cactus.TestCases
         [SetUp]
         public void SetupTest()
         {
-            _log.LogInfo(string.Format("-======================================================-"
+            _log.Info(string.Format("-======================================================-"
                                        + Environment.NewLine + "Test Case: [{0}] is being started.", TestContext.CurrentContext.Test.Name));
 
             setupBeforeTimer();
@@ -109,7 +104,7 @@ namespace Cactus.TestCases
                         break;
                 }
 
-                _log.LogInfo(string.Format(
+                _log.Info(string.Format(
                     "-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^-" + Environment.NewLine +
                     addon + Environment.NewLine
                     + "Test Case: [{0}] has ended: Status: {1} , State: {2} {3} and took seconds {4}.{5}{3}, {6}",
@@ -141,20 +136,9 @@ namespace Cactus.TestCases
         /// <param name="milliSecondsToPause"></param>
         public void Pause(int milliSecondsToPause)
         {
-            _log.LogInfo(string.Format("Pausing for: {0} milliseconds", milliSecondsToPause));
+            _log.Info($"Pausing for: {milliSecondsToPause} milliseconds");
             Thread.Sleep(milliSecondsToPause);
             Support.WaitForPageReadyState();
         }
-
-        public void VerifyRow(string[] expected, string[] actual)
-        {
-            actual.ShouldHaveCount(expected.Length);
-
-            for (var i = 0; i < expected.Length; i++)
-            {
-                actual[i].ShouldEqual(expected[i]);
-            }
-        }
-
     }
 }

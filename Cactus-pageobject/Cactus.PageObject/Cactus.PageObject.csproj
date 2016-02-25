@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -8,7 +8,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>Cactus</RootNamespace>
     <AssemblyName>Cactus.PageObject</AssemblyName>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <ProjectTypeGuids>{3AC096D0-A1C2-E12C-1390-A8335801FDAB};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
     <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">10.0</VisualStudioVersion>
@@ -18,6 +18,7 @@
     <TestProjectType>UnitTest</TestProjectType>
     <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\</SolutionDir>
     <RestorePackages>true</RestorePackages>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -37,16 +38,32 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="AWSSDK, Version=2.3.50.1, Culture=neutral, PublicKeyToken=9f476d3089b52be3, processorArchitecture=MSIL">
-      <HintPath>..\packages\AWSSDK.2.3.50.1\lib\net45\AWSSDK.dll</HintPath>
+    <Reference Include="AWSSDK, Version=2.3.54.2, Culture=neutral, PublicKeyToken=9f476d3089b52be3, processorArchitecture=MSIL">
+      <HintPath>..\packages\AWSSDK.2.3.54.2\lib\net45\AWSSDK.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="BasicFormatsForCore, Version=2.6.2.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\FiddlerCore.4.6.2.0\lib\net40\BasicFormatsForCore.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="BCMakeCert, Version=2.0.7.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\FiddlerCore.4.6.2.0\lib\net40\BCMakeCert.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="CertMaker, Version=4.5.0.1, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\FiddlerCore.4.6.2.0\lib\net40\CertMaker.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="FiddlerCore4, Version=4.6.2.0, Culture=neutral, PublicKeyToken=67cb91587178ac5a, processorArchitecture=MSIL">
+      <HintPath>..\packages\FiddlerCore.4.6.2.0\lib\net40\FiddlerCore4.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="HtmlTags, Version=3.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\HtmlTags.3.0.0.186\lib\4.0\HtmlTags.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="log4net, Version=1.2.13.0, Culture=neutral, PublicKeyToken=669e0ddf0bb1aa2a, processorArchitecture=MSIL">
-      <HintPath>..\packages\log4net.2.0.3\lib\net40-full\log4net.dll</HintPath>
+    <Reference Include="log4net, Version=1.2.15.0, Culture=neutral, PublicKeyToken=669e0ddf0bb1aa2a, processorArchitecture=MSIL">
+      <HintPath>..\packages\log4net.2.0.5\lib\net45-full\log4net.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="Microsoft.CSharp" />
@@ -76,12 +93,12 @@
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.XML" />
     <Reference Include="System.Xml.Linq" />
-    <Reference Include="WebDriver, Version=2.47.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\Selenium.WebDriver.2.47.0\lib\net40\WebDriver.dll</HintPath>
+    <Reference Include="WebDriver, Version=2.52.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\Selenium.WebDriver.2.52.0\lib\net40\WebDriver.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="WebDriver.Support, Version=2.47.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\Selenium.Support.2.47.0\lib\net40\WebDriver.Support.dll</HintPath>
+    <Reference Include="WebDriver.Support, Version=2.52.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\Selenium.Support.2.52.0\lib\net40\WebDriver.Support.dll</HintPath>
       <Private>True</Private>
     </Reference>
   </ItemGroup>
@@ -112,6 +129,9 @@
     <Compile Include="Drivers\SeleniumEventHandlers.cs" />
     <Compile Include="Drivers\SeleniumExtensions.cs" />
     <Compile Include="Drivers\Support.cs" />
+    <Compile Include="Infrastructure\ILogger.cs" />
+    <Compile Include="Infrastructure\ILoggerService.cs" />
+    <Compile Include="Infrastructure\LogManager.cs" />
     <Compile Include="Infrastructure\NStatsD\Client.cs" />
     <Compile Include="Infrastructure\NStatsD\StatsDConfigurationSection.cs" />
     <Compile Include="Infrastructure\NunitRetry\RetriedTestMethod.cs" />
@@ -135,12 +155,16 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="..\packages\Selenium.WebDriver.ChromeDriver.2.17.0.0\driver\chromedriver.exe">
+    <Content Include="..\packages\Selenium.WebDriver.ChromeDriver.2.21.0.0\driver\chromedriver.exe">
       <Link>chromedriver.exe</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="..\packages\Selenium.WebDriver.IEDriver.2.47.0.0\driver\IEDriverServer.exe">
+    <Content Include="..\packages\Selenium.WebDriver.IEDriver.2.49.0.0\driver\IEDriverServer.exe">
       <Link>IEDriverServer.exe</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\packages\EdgeWebdriver.2.1\MicrosoftWebDriver.exe">
+      <Link>MicrosoftWebDriver.exe</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
